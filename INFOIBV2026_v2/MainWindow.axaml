@@ -1,0 +1,61 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="ImageApp.MainWindow"
+        Width="1000" Height="650"
+        MinWidth="800" MinHeight="500"
+        Title="Image Processing Assignment">
+
+  <Grid RowDefinitions="*, Auto, Auto, Auto" Margin="10">
+
+    <!-- Side-by-side images -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,*" Margin="0,0,0,10">
+      <!-- Original Image Container -->
+      <Grid Grid.Column="0" RowDefinitions="Auto,*" Margin="0,0,5,0">
+        <TextBlock Text="Original Image" FontWeight="SemiBold" Margin="2,0,0,4"/>
+        <Border Grid.Row="1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                ClipToBounds="True">
+          <Image x:Name="OriginalImage" Stretch="Uniform" Margin="4"/>
+        </Border>
+      </Grid>
+
+      <!-- Processed Image Container -->
+      <Grid Grid.Column="1" RowDefinitions="Auto,*" Margin="5,0,0,0">
+        <TextBlock Text="Processed Image" FontWeight="SemiBold" Margin="2,0,0,4"/>
+        <Border Grid.Row="1"
+                BorderBrush="{DynamicResource SystemControlForegroundBaseMediumLowBrush}"
+                BorderThickness="1"
+                CornerRadius="4"
+                Background="{DynamicResource SystemControlBackgroundAltHighBrush}"
+                ClipToBounds="True">
+          <Image x:Name="ProcessedImage" Stretch="Uniform" Margin="4"/>
+        </Border>
+      </Grid>
+    </Grid>
+
+    <!-- Controls: Load, Save, Dropdown, Apply -->
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="10" Margin="0,0,0,8">
+      <Button Content="Load Image" Width="110" Click="OnLoadImage"/>
+      <Button Content="Save Image" Width="110" Click="OnSaveImage"/>
+      <ComboBox x:Name="OperationBox" Width="240"/>
+      <Button x:Name="ApplyButton" Content="Apply" Width="100" Click="OnApply"/>
+    </StackPanel>
+
+    <!--
+      TODO: Several functions/tasks need extra parameters from the user
+      (e.g. kernel size, sigma, threshold, structuring element size, filter type).
+      Add whatever controls you need here (TextBoxes, ComboBoxes, etc.) and
+      read their values in OnApply. You may restructure this GUI as needed,
+      as long as every implemented function stays reachable through the interface.
+    -->
+    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,0,0,4">
+      <!-- Add custom parameter controls here -->
+    </StackPanel>
+
+    <TextBlock Grid.Row="3" x:Name="StatusText" Text="" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+  </Grid>
+</Window>
