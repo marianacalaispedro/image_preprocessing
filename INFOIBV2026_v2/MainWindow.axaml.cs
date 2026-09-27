@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -385,8 +387,27 @@ namespace ImageApp
         {
             // create the filter
             float[,] filter = new float[size, size];
+            float sum = 0;
 
             // TODO: add your functionality and checks
+            for (int i = 0; i < size; i++)
+            {
+                for (int j = 0; j < size; j++)
+                {
+                    int x = i - size / 2;
+                    int y = j - size / 2;
+                    filter[i, j] = (float)Math.Exp(-(x * x + y * y) / (2 * sigma * sigma));
+                    sum += filter[i, j];
+                }
+            }
+            // normalizing the filter
+            for (int i = 0; i < size; i++)
+            {
+                for (int j = 0; j < size; j++)
+                {
+                    filter[i, j] /= sum;
+                }
+            }
 
             return filter;
         }
@@ -402,8 +423,45 @@ namespace ImageApp
             // create temporary grayscale image
             byte[,] tempImage = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
 
-            // TODO: add your functionality and checks, think about border handling and type conversion
+            int size = filter.GetLength(0);
+            int padding = size / 2;
+            
+            // creating padding
+            int newWidth = inputImage.GetLength(0) + 2 * padding;
+            int newHeight = inputImage.GetLength(1) + 2 * padding;
 
+            // creating temporary padded imag
+            byte[,] paddedImage = new byte[newWidth, newHeight];
+
+            for (int y = 0; y < newHeight; y++)
+            for (int x = 0; x < newWidth; x++)
+            {
+                int originalX = x - padding;
+                int originalY = y - padding;
+
+                originalX = Math.Max(0, Math.Min(originalX, inputImage.GetLength(0) - 1));
+                originalY = Math.Max(0, Math.Min(originalY, inputImage.GetLength(1) - 1));
+
+                paddedImage[x, y] = inputImage[originalX, originalY];
+            }
+
+            // TODO: add your functionality and checks, think about border handling and type conversion
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            {
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
+                float sum = 0;
+                for (int i = 0; i < size ; i++)
+                {
+                    for (int j = 0; j < size; j++)
+                        {
+                            sum += filter[i, j] * paddedImage[x + i, y + j];
+                        }
+                }
+                sum = Math.Max(0, Math.Min(255, sum));
+                tempImage[x, y] = (byte)sum;  
+            }
+            }
             return tempImage;
         }
 
@@ -417,9 +475,47 @@ namespace ImageApp
         {
             // create temporary grayscale image
             byte[,] tempImage = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
+            
 
+            int padding = kernelSize / 2;
+            
+            // creating padding
+            int newWidth = inputImage.GetLength(0) + 2 * padding;
+            int newHeight = inputImage.GetLength(1) + 2 * padding;
+
+            // creating temporary padded imag
+            byte[,] paddedImage = new byte[newWidth, newHeight];
+
+            for (int y = 0; y < newHeight; y++)
+            for (int x = 0; x < newWidth; x++)
+            {
+                int originalX = x - padding;
+                int originalY = y - padding;
+
+                originalX = Math.Max(0, Math.Min(originalX, inputImage.GetLength(0) - 1));
+                originalY = Math.Max(0, Math.Min(originalY, inputImage.GetLength(1) - 1));
+
+                paddedImage[x, y] = inputImage[originalX, originalY];
+            }
+
+            List<byte> window = new List<byte>(kernelSize * kernelSize);
             // TODO: add your functionality and checks, think about border handling
-
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            {
+                for (int y = 0; y < inputImage.GetLength(1); y++)
+                {
+                    for (int i = 0; i < kernelSize ; i++)
+                    {
+                        window.Clear();
+                        for (int j = 0; j < kernelSize; j++)
+                            {
+                                window.Add(paddedImage[x + i,y + j]);
+                            }
+                    }
+                window.Sort();
+                tempImage[x, y] = window[window.Count/2];  
+                }
+            }
             return tempImage;
         }
 
