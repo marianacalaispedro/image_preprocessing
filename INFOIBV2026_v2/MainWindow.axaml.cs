@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -337,13 +338,16 @@ namespace ImageApp
             byte[,] tempImage = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             
             // TODO: add your functionality and checks
-            for (int x = 0; x < tempImage.GetLength(0); x++)
-            for (int y = 0; y < tempImage.GetLength(1); y++)
-            {
-                tempImage[x, y] = (byte)(255 - inputImage[x, y]);
-            }
+            // for (int x = 0; x < tempImage.GetLength(0); x++)
+            // for (int y = 0; y < tempImage.GetLength(1); y++)
+            // {
+            //     tempImage[x, y] = (byte)(255 - inputImage[x, y]);
+            // }
 
-            return tempImage;
+            // return tempImage;
+            Func<byte, byte> inverse = c => (byte)(255 - c);
+            inputImage = applyPointOperationToAll(inputImage, inverse);
+            return inputImage;
         }
 
         /// <summary>
@@ -366,11 +370,13 @@ namespace ImageApp
                 if (inputImage[x, y] > max) max = inputImage[x, y];  
             }
 
-            for (int x = 0; x < tempImage.GetLength(0); x++)
-            for (int y = 0; y < tempImage.GetLength(1); y++)
-            {
-                tempImage[x, y] = (byte)((inputImage[x, y]-min) * 255/(max-min));  
-            }
+            // for (int x = 0; x < tempImage.GetLength(0); x++)
+            // for (int y = 0; y < tempImage.GetLength(1); y++)
+            // {
+            //     tempImage[x, y] = (byte)((inputImage[x, y]-min) * 255/(max-min));  
+            // }
+            Func<byte, byte> adjust = c => (byte)((c-min) * 255/(max-min));
+            tempImage = applyPointOperationToAll(inputImage, adjust);
 
             return tempImage;
         }
@@ -581,6 +587,16 @@ namespace ImageApp
             Marshal.Copy(buffer, 0, fb.Address, totalBytes);
 
             return bmp;
+        }
+
+        private byte[,] applyPointOperationToAll(byte[,] inputImage, Func<byte, byte> pointOperation)
+        {
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++) 
+            {
+                inputImage[x, y] = pointOperation(inputImage[x,y]);
+            }
+            return inputImage;
         }
     }
 }
