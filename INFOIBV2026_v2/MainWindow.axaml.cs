@@ -369,7 +369,7 @@ namespace ImageApp
             for (int x = 0; x < tempImage.GetLength(0); x++)
             for (int y = 0; y < tempImage.GetLength(1); y++)
             {
-                tempImage[x, y] = (byte)((inputImage[x, y]-min) * 255/(max-min));  
+                tempImage[x, y] = (byte)((inputImage[x, y]-min) * (255/(max-min)));  
             }
 
             return tempImage;
