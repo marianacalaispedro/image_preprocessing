@@ -235,7 +235,11 @@ namespace ImageApp
 
                         case ProcessingFunctions.BinaryErodeImage:
                         {
-                            bool[,] structElem = null; // Define this structuring element yourself
+                            bool[,] structElem = {
+                                {true, true, true}, 
+                                {true, true, true},
+                                {true, true, true}                
+                            }; // Define this structuring element yourself
                             gray = BinaryErodeImage(gray, structElem);
                             break;
                         }
@@ -626,8 +630,25 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement binary erosion
+            inputImage = InvertImage(inputImage);
+            structElem = ReflectStructElem(structElem);
+            output = InvertImage(BinaryDilateImage(inputImage, structElem));
+
             return output;
         }
+
+        private bool[,] ReflectStructElem(bool[,] structElem)
+        {
+            int structElemSize = structElem.GetLength(0);
+            bool[,] output = new bool[structElemSize, structElemSize];
+            for (int x = 0; x < structElemSize; x++)
+            for (int y = 0; y < structElemSize; y++)
+            {
+                output[structElemSize - 1 - x, structElemSize - 1 - y] = structElem[x, y];
+            }
+
+            return output;
+        } 
 
         /// <summary>
         /// Performs morphological binary dilation using the provided structuring element.
