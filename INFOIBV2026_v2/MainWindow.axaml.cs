@@ -223,8 +223,8 @@ namespace ImageApp
                             break;
                         case ProcessingFunctions.EdgeMagnitude:
                         {
-                            sbyte[,] horizontalKernel = null; // Define this kernel yourself
-                            sbyte[,] verticalKernel = null; // Define this kernel yourself
+                            sbyte[,] horizontalKernel = {{-1, 0, 1}, {-1, 0, 1}, {-1, 0, 1}}; // Define this kernel yourself --> prewitt (noise resistant)
+                            sbyte[,] verticalKernel = {{-1, -1, -1}, {0, 0, 0}, {1, 1, 1}}; // Define this kernel yourself --> --> prewitt (noise resistant)
                             gray = EdgeMagnitude(gray, horizontalKernel, verticalKernel);
                             break;
                         }
@@ -433,8 +433,8 @@ namespace ImageApp
             // creating temporary padded imag
             byte[,] paddedImage = new byte[newWidth, newHeight];
 
-            for (int y = 0; y < newHeight; y++)
             for (int x = 0; x < newWidth; x++)
+            for (int y = 0; y < newHeight; y++)
             {
                 int originalX = x - padding;
                 int originalY = y - padding;
@@ -476,7 +476,6 @@ namespace ImageApp
             // create temporary grayscale image
             byte[,] tempImage = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             
-
             int padding = kernelSize / 2;
             
             // creating padding
@@ -486,8 +485,8 @@ namespace ImageApp
             // creating temporary padded imag
             byte[,] paddedImage = new byte[newWidth, newHeight];
 
+            for (int x = 0; x <newWidth; x++)
             for (int y = 0; y < newHeight; y++)
-            for (int x = 0; x < newWidth; x++)
             {
                 int originalX = x - padding;
                 int originalY = y - padding;
@@ -536,7 +535,52 @@ namespace ImageApp
             byte[,] tempImage = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
 
             // TODO: add your functionality and checks, think about border handling and type conversion (negative values!)
+            List<sbyte[,]> kernels = new List<sbyte[,]>{horizontalKernel, verticalKernel};
 
+            int padding = horizontalKernel.GetLength(0) / 2;
+            
+            // creating padding
+            int newWidth = inputImage.GetLength(0) + 2 * padding;
+            int newHeight = inputImage.GetLength(1) + 2 * padding;
+
+            // creating temporary padded imag
+            byte[,] paddedImage = new byte[newWidth, newHeight];
+
+            for (int x = 0; x < newWidth; x++)
+            for (int y = 0; y < newHeight; y++)
+            {
+                int originalX = x - padding;
+                int originalY = y - padding;
+
+                originalX = Math.Max(0, Math.Min(originalX, inputImage.GetLength(0) - 1));
+                originalY = Math.Max(0, Math.Min(originalY, inputImage.GetLength(1) - 1));
+
+                paddedImage[x, y] = inputImage[originalX, originalY];
+            }
+
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            {
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
+                List<float> derivatives = new List<float>{};
+                foreach (sbyte[,]kernel in kernels)
+                {
+                    float sum = 0;
+                    for (int i = 0; i < kernel.GetLength(0) ; i++)
+                    {
+                        for (int j = 0; j < kernel.GetLength(1); j++)
+                            {
+                                sum += kernel[i, j] * paddedImage[x + i, y + j];
+                            }
+                    }
+                    derivatives.Add(sum);
+                     
+                }
+                double magnitude = Math.Sqrt(Math.Pow(derivatives[0], 2) + Math.Pow(derivatives[1], 2));
+                magnitude = Math.Max(0, Math.Min(255, magnitude));
+                tempImage[x, y] = (byte)magnitude;
+            }
+            }
             return tempImage;
         }
 
@@ -551,8 +595,14 @@ namespace ImageApp
             // create temporary grayscale image
             byte[,] tempImage = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
 
-            // TODO: add your functionality and checks, think about how to represent the binary values
+             for (int x = 0; x < inputImage.GetLength(0); x++)
+            {
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
 
+                tempImage[x, y] = (byte)Math.Min(threshold, inputImage[x, y]);
+            }
+            }
             return tempImage;
         }
 
