@@ -242,7 +242,11 @@ namespace ImageApp
 
                         case ProcessingFunctions.BinaryDilateImage:
                         {
-                            bool[,] structElem = null; // Define this structuring element yourself
+                            bool[,] structElem = {
+                                {true, true, true}, 
+                                {true, true, true},
+                                {true, true, true}                
+                            }; // Define this structuring element yourself
                             gray = BinaryDilateImage(gray, structElem);
                             break;
                         }
@@ -635,8 +639,26 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement binary dilation
+            int structElemSize = structElem.GetLength(0)/2;
+            for (int x = structElemSize; x < inputImage.GetLength(0)-structElemSize; x++)
+            for (int y = structElemSize; y < inputImage.GetLength(1)-structElemSize; y++)
+            {    
+                output[x, y] = BinaryDilate(x, y);
+            }
+
+            byte BinaryDilate(int x, int y)
+            {
+                for (int i = -1*structElemSize; i < structElemSize; i++)
+                for (int j = -1*structElemSize; j < structElemSize; j++)
+                {
+                   if (inputImage[x+i, y+j] == 255 && structElem[i+structElemSize, j+structElemSize]) return 255;
+                }      
+                return 0;
+            }
+
             return output;
         }
+
 
         /// <summary>
         /// Performs morphological binary opening (erosion followed by dilation).
