@@ -53,6 +53,22 @@
     -->
     <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="10" Margin="0,0,0,4">
       <!-- Add custom parameter controls here -->
+
+      <TextBlock Text="Filter:" VerticalAlignment="Center"/>
+      <ComboBox x:Name="FilterBox" Width="110" SelectedIndex="0">
+        <ComboBoxItem>Gaussian</ComboBoxItem>
+        <ComboBoxItem>Median</ComboBoxItem>
+      </ComboBox>
+
+      <TextBlock Text="Kernel size:" VerticalAlignment="Center"/>
+      <TextBox x:Name="KernelSizeBox" Width="50" Text="5"/>
+
+      <TextBlock Text="Sigma:" VerticalAlignment="Center"/>
+      <TextBox x:Name="SigmaBox" Width="50" Text="1,0"/>
+
+      <TextBlock Text="Threshold:" VerticalAlignment="Center"/>
+      <TextBox x:Name="ThresholdBox" Width="50" Text="128"/>
+
     </StackPanel>
 
     <TextBlock Grid.Row="3" x:Name="StatusText" Text="" TextWrapping="Wrap" Margin="0,4,0,0"/>

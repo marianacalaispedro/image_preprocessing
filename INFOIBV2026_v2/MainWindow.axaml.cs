@@ -13,6 +13,9 @@ namespace ImageApp
 {
     public partial class MainWindow : Window
     {
+        // Prewitt kernels -- shared by EdgeMagnitude and Task1
+        private static readonly sbyte[,] PrewittHorizontal = { {-1, 0, 1}, {-1, 0, 1}, {-1, 0, 1} };
+        private static readonly sbyte[,] PrewittVertical   = { {-1, -1, -1}, {0, 0, 0}, {1, 1, 1} };
         private WriteableBitmap? _loadedBitmap; // the raw loaded image, kept in color, for display in OriginalImage
         private byte[,,]? _loadedColorPixels; // [x, y, channel] with channel 0=R, 1=G, 2=B -- extracted once at load time
         private byte[,]? _processedGray; // Processed grayscale values (nullable)
@@ -41,6 +44,7 @@ namespace ImageApp
             BinaryCloseImage,
             GrayscaleErodeImage,
             GrayscaleDilateImage,
+            Task1,
         }
 
         public MainWindow()
@@ -187,6 +191,27 @@ namespace ImageApp
                 return;
             }
 
+            
+            string selectedFilter = (FilterBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "";
+            
+            if (!byte.TryParse(ThresholdBox.Text, out byte threshold))
+            {
+                StatusText.Text = "Threshold must be an integer 0–255.";
+                return;
+            }
+
+            if (!byte.TryParse(KernelSizeBox.Text, out byte kernelSize) || kernelSize < 1 || kernelSize % 2 == 0)
+            {
+                StatusText.Text = "Kernel size must be a positive odd integer.";
+                return;
+            }
+
+            if (!float.TryParse(SigmaBox.Text, out float sigma) || sigma <= 0)
+            {
+                StatusText.Text = "Sigma must be a positive number.";
+                return;
+            }
+
             ApplyButton.IsEnabled = false;
             StatusText.Text = "Processing...";
 
@@ -224,9 +249,7 @@ namespace ImageApp
                             break;
                         case ProcessingFunctions.EdgeMagnitude:
                         {
-                            sbyte[,] horizontalKernel = {{-1, 0, 1}, {-1, 0, 1}, {-1, 0, 1}}; // Define this kernel yourself --> prewitt (noise resistant)
-                            sbyte[,] verticalKernel = {{-1, -1, -1}, {0, 0, 0}, {1, 1, 1}}; // Define this kernel yourself --> --> prewitt (noise resistant)
-                            gray = EdgeMagnitude(gray, horizontalKernel, verticalKernel);
+                            gray = EdgeMagnitude(gray, PrewittHorizontal, PrewittVertical);
                             break;
                         }
                         case ProcessingFunctions.ThresholdImage:
@@ -272,6 +295,12 @@ namespace ImageApp
                         {
                             int[,] grayStructElem = null; // Define this structuring element yourself
                             gray = GrayscaleDilateImage(gray, grayStructElem);
+                            break;
+                        }
+
+                        case ProcessingFunctions.Task1:
+                        {
+                            gray = Task1(gray, selectedFilter, kernelSize, sigma, threshold);
                             break;
                         }
 
@@ -509,9 +538,9 @@ namespace ImageApp
             {
                 for (int y = 0; y < inputImage.GetLength(1); y++)
                 {
+                    window.Clear();
                     for (int i = 0; i < kernelSize ; i++)
                     {
-                        window.Clear();
                         for (int j = 0; j < kernelSize; j++)
                             {
                                 window.Add(paddedImage[x + i,y + j]);
@@ -601,13 +630,13 @@ namespace ImageApp
             // create temporary grayscale image
             byte[,] tempImage = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
 
-             for (int x = 0; x < inputImage.GetLength(0); x++)
-            {
+            for (int x = 0; x < inputImage.GetLength(0); x++)
             for (int y = 0; y < inputImage.GetLength(1); y++)
             {
-
-                tempImage[x, y] = (byte)Math.Min(threshold, inputImage[x, y]);
-            }
+                if (inputImage[x, y] >= threshold)
+                    tempImage[x, y] = 255;
+                else
+                    tempImage[x, y] = 0;
             }
             return tempImage;
         }
@@ -687,6 +716,41 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement grayscale dilation
+            return output;
+        }
+
+        /// <summary>
+        /// Performs Task 1.
+        /// apply the selected filter (Gaussian or Median) with the given kernel size (and
+        /// sigma, if Gaussian), then
+        /// o apply edge detection, and finally
+        /// o apply the given threshold to the result.
+        /// o The output binary image should be shown in the GUI.
+        /// </summary>
+        /// <param name="inputImage">The 2D grayscale input image.</param>
+        /// <param name="selectedFilter">The selected filter chosen by the user (Gaussian or Median).</param>
+        /// <param name="kernelSize">The selected kernel size</param>
+        /// <param name="sigma">The selected sigma value</param>
+        /// <param name="threshold">The selected threshold
+        /// <returns>The dilated grayscale image.</returns>
+        private byte[,] Task1(byte[,] inputImage,string selectedFilter, byte kernelSize, float sigma, byte threshold)
+        {
+            byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
+            if (selectedFilter == "Gaussian")
+            {
+                float[,] kernel = CreateGaussianFilter(kernelSize, sigma);
+                output = ConvolveImage(inputImage, kernel);
+            }
+
+            else // "Median"
+            {
+                output = MedianFilter(inputImage, (byte)kernelSize);
+            }
+
+            output = EdgeMagnitude(output, PrewittHorizontal, PrewittVertical);
+            
+            output = ThresholdImage(output, threshold);
+            
             return output;
         }
 
