@@ -202,6 +202,7 @@ namespace ImageApp
                     // operation always starts from the original loaded image, never chained
                     // from a previous Apply's result.
                     byte[,] gray = ConvertToGrayscale(colorPixels);
+
                     int structElemSize = 11;
                     bool[,] generalStructElem = new bool[structElemSize, structElemSize];
                     for (int x = 0; x < structElemSize; x++)
@@ -209,6 +210,15 @@ namespace ImageApp
                     {
                         generalStructElem[x, y] = true;                            
                     }
+
+                    int?[,] structElemGrey =
+                    {
+                        {null, 0, 2, 0, null},
+                           {0, 2, 3, 2, 0},
+                           {2, 3, 5, 3, 2},
+                           {0, 2, 3, 2, 0},
+                        {null, 0, 2, 0, null}
+                    };
 
                     switch (selected)
                     {
@@ -270,14 +280,14 @@ namespace ImageApp
 
                         case ProcessingFunctions.GrayscaleErodeImage:
                         {
-                            int[,] grayStructElem = null; // Define this structuring element yourself
+                            int?[,] grayStructElem = structElemGrey; // Define this structuring element yourself
                             gray = GrayscaleErodeImage(gray, grayStructElem);
                             break;
                         }
 
                         case ProcessingFunctions.GrayscaleDilateImage:
                         {
-                            int[,] grayStructElem = null; // Define this structuring element yourself
+                            int?[,] grayStructElem = structElemGrey; // Define this structuring element yourself
                             gray = GrayscaleDilateImage(gray, grayStructElem);
                             break;
                         }
@@ -716,7 +726,7 @@ namespace ImageApp
         /// <param name="inputImage">The 2D grayscale input image.</param>
         /// <param name="structElem">2D integer structuring element defining neighborhood offsets.</param>
         /// <returns>The eroded grayscale image.</returns>
-        private byte[,] GrayscaleErodeImage(byte[,] inputImage, int[,] structElem)
+        private byte[,] GrayscaleErodeImage(byte[,] inputImage, int?[,] structElem)
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement grayscale erosion
@@ -729,10 +739,71 @@ namespace ImageApp
         /// <param name="inputImage">The 2D grayscale input image.</param>
         /// <param name="structElem">2D integer structuring element defining neighborhood offsets.</param>
         /// <returns>The dilated grayscale image.</returns>
-        private byte[,] GrayscaleDilateImage(byte[,] inputImage, int[,] structElem)
+        private byte[,] GrayscaleDilateImage(byte[,] inputImage, int?[,] structElem)
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
-            // TODO: implement grayscale dilation
+
+            int structElemSize = structElem.GetLength(0)/2;
+
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
+                int max = 0;
+                for (int i = -1*structElemSize; i < structElemSize; i++)
+                for (int j = -1*structElemSize; j < structElemSize; j++)
+                {
+                    // check if structElem cell falls out of bound or should not be checked (is null)
+                    if (!OutOfBounds(x+i, y+j, inputImage.GetLength(0), inputImage.GetLength(1)) &&
+                        structElem[i+structElemSize, j+structElemSize] != null)
+                    {
+                        int temp = (int)inputImage[x+i, y+j] + (int)structElem[i+structElemSize, j+structElemSize];
+                        max = Math.Max(temp, max);
+                    }                                    
+                }
+
+                output[x, y] = (byte)Math.Clamp(max, 0, 255);
+            }
+
+            return output;
+        }
+
+        private bool OutOfBounds(int x, int y, int xMax, int yMax)
+        {
+            return (x<0 || x>=xMax || y<0 || y>=yMax);
+        }
+
+        /// <summary>
+        /// Performs Task 1.
+        /// apply the selected filter (Gaussian or Median) with the given kernel size (and
+        /// sigma, if Gaussian), then
+        /// o apply edge detection, and finally
+        /// o apply the given threshold to the result.
+        /// o The output binary image should be shown in the GUI.
+        /// </summary>
+        /// <param name="inputImage">The 2D grayscale input image.</param>
+        /// <param name="selectedFilter">The selected filter chosen by the user (Gaussian or Median).</param>
+        /// <param name="kernelSize">The selected kernel size</param>
+        /// <param name="sigma">The selected sigma value</param>
+        /// <param name="threshold">The selected threshold
+        /// <returns>The dilated grayscale image.</returns>
+        private byte[,] Task1(byte[,] inputImage,string selectedFilter, byte kernelSize, float sigma, byte threshold)
+        {
+            byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
+            if (selectedFilter == "Gaussian")
+            {
+                float[,] kernel = CreateGaussianFilter(kernelSize, sigma);
+                output = ConvolveImage(inputImage, kernel);
+            }
+
+            else // "Median"
+            {
+                output = MedianFilter(inputImage, (byte)kernelSize);
+            }
+
+            output = EdgeMagnitude(output, PrewittHorizontal, PrewittVertical);
+            
+            output = ThresholdImage(output, threshold);
+            
             return output;
         }
 
