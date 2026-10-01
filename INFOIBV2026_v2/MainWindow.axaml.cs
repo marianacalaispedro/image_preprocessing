@@ -694,6 +694,8 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement binary opening
+            output = BinaryDilateImage(BinaryErodeImage(inputImage, structElem), structElem);
+
             return output;
         }
 
@@ -707,6 +709,8 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement binary closing
+            output = BinaryErodeImage(BinaryDilateImage(inputImage, structElem), structElem);
+
             return output;
         }
 
