@@ -227,6 +227,13 @@ namespace ImageApp
                     // operation always starts from the original loaded image, never chained
                     // from a previous Apply's result.
                     byte[,] gray = ConvertToGrayscale(colorPixels);
+                    int structElemSize = 11;
+                    bool[,] generalStructElem = new bool[structElemSize, structElemSize];
+                    for (int x = 0; x < structElemSize; x++)
+                    for (int y = 0; y < structElemSize; y++)
+                    {
+                        generalStructElem[x, y] = true;                            
+                    }
 
                     switch (selected)
                     {
@@ -258,28 +265,28 @@ namespace ImageApp
 
                         case ProcessingFunctions.BinaryErodeImage:
                         {
-                            bool[,] structElem = null; // Define this structuring element yourself
+                            bool[,] structElem = generalStructElem; // Define this structuring element yourself
                             gray = BinaryErodeImage(gray, structElem);
                             break;
                         }
 
                         case ProcessingFunctions.BinaryDilateImage:
                         {
-                            bool[,] structElem = null; // Define this structuring element yourself
+                            bool[,] structElem = generalStructElem; // Define this structuring element yourself
                             gray = BinaryDilateImage(gray, structElem);
                             break;
                         }
 
                         case ProcessingFunctions.BinaryOpenImage:
                         {
-                            bool[,] structElem = null; // Define this structuring element yourself
+                            bool[,] structElem = generalStructElem; // Define this structuring element yourself
                             gray = BinaryOpenImage(gray, structElem);
                             break;
                         }
 
                         case ProcessingFunctions.BinaryCloseImage:
                         {
-                            bool[,] structElem = null; // Define this structuring element yourself
+                            bool[,] structElem = generalStructElem; // Define this structuring element yourself
                             gray = BinaryCloseImage(gray, structElem);
                             break;
                         }
@@ -651,8 +658,25 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement binary erosion
+            inputImage = InvertImage(inputImage);
+            structElem = ReflectStructElem(structElem);
+            output = InvertImage(BinaryDilateImage(inputImage, structElem));
+
             return output;
         }
+
+        private bool[,] ReflectStructElem(bool[,] structElem)
+        {
+            int structElemSize = structElem.GetLength(0);
+            bool[,] output = new bool[structElemSize, structElemSize];
+            for (int x = 0; x < structElemSize; x++)
+            for (int y = 0; y < structElemSize; y++)
+            {
+                output[structElemSize - 1 - x, structElemSize - 1 - y] = structElem[x, y];
+            }
+
+            return output;
+        } 
 
         /// <summary>
         /// Performs morphological binary dilation using the provided structuring element.
@@ -664,8 +688,26 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement binary dilation
+            int structElemSize = structElem.GetLength(0)/2;
+            for (int x = structElemSize; x < inputImage.GetLength(0)-structElemSize; x++)
+            for (int y = structElemSize; y < inputImage.GetLength(1)-structElemSize; y++)
+            {    
+                output[x, y] = BinaryDilate(x, y);
+            }
+
+            byte BinaryDilate(int x, int y)
+            {
+                for (int i = -1*structElemSize; i < structElemSize; i++)
+                for (int j = -1*structElemSize; j < structElemSize; j++)
+                {
+                   if (inputImage[x+i, y+j] == 255 && structElem[i+structElemSize, j+structElemSize]) return 255;
+                }      
+                return 0;
+            }
+
             return output;
         }
+
 
         /// <summary>
         /// Performs morphological binary opening (erosion followed by dilation).
@@ -677,6 +719,8 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement binary opening
+            output = BinaryDilateImage(BinaryErodeImage(inputImage, structElem), structElem);
+
             return output;
         }
 
@@ -690,6 +734,8 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement binary closing
+            output = BinaryErodeImage(BinaryDilateImage(inputImage, structElem), structElem);
+
             return output;
         }
 
