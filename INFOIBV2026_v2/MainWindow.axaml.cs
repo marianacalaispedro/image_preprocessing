@@ -729,7 +729,28 @@ namespace ImageApp
         private byte[,] GrayscaleErodeImage(byte[,] inputImage, int?[,] structElem)
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
-            // TODO: implement grayscale erosion
+            
+                        int structElemSize = structElem.GetLength(0)/2;
+
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
+                int min = 255;
+                for (int i = -1*structElemSize; i < structElemSize; i++)
+                for (int j = -1*structElemSize; j < structElemSize; j++)
+                {
+                    // check if structElem cell falls out of bound or should not be checked (is null)
+                    if (!OutOfBounds(x+i, y+j, inputImage.GetLength(0), inputImage.GetLength(1)) &&
+                        structElem[i+structElemSize, j+structElemSize] != null)
+                    {
+                        int temp = (int)inputImage[x+i, y+j] - (int)structElem[i+structElemSize, j+structElemSize];
+                        min = Math.Min(temp, min);
+                    }                                    
+                }
+
+                output[x, y] = (byte)Math.Clamp(min, 0, 255);
+            }
+
             return output;
         }
 
