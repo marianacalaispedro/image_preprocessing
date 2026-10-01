@@ -202,6 +202,13 @@ namespace ImageApp
                     // operation always starts from the original loaded image, never chained
                     // from a previous Apply's result.
                     byte[,] gray = ConvertToGrayscale(colorPixels);
+                    int structElemSize = 11;
+                    bool[,] generalStructElem = new bool[structElemSize, structElemSize];
+                    for (int x = 0; x < structElemSize; x++)
+                    for (int y = 0; y < structElemSize; y++)
+                    {
+                        generalStructElem[x, y] = true;                            
+                    }
 
                     switch (selected)
                     {
@@ -235,11 +242,7 @@ namespace ImageApp
 
                         case ProcessingFunctions.BinaryErodeImage:
                         {
-                            bool[,] structElem = {
-                                {true, true, true}, 
-                                {true, true, true},
-                                {true, true, true}                
-                            }; // Define this structuring element yourself
+                            bool[,] structElem = generalStructElem; // Define this structuring element yourself
                             gray = BinaryErodeImage(gray, structElem);
                             break;
                         }
