@@ -857,41 +857,6 @@ namespace ImageApp
             return output;
         }
 
-        /// <summary>
-        /// Performs Task 1.
-        /// apply the selected filter (Gaussian or Median) with the given kernel size (and
-        /// sigma, if Gaussian), then
-        /// o apply edge detection, and finally
-        /// o apply the given threshold to the result.
-        /// o The output binary image should be shown in the GUI.
-        /// </summary>
-        /// <param name="inputImage">The 2D grayscale input image.</param>
-        /// <param name="selectedFilter">The selected filter chosen by the user (Gaussian or Median).</param>
-        /// <param name="kernelSize">The selected kernel size</param>
-        /// <param name="sigma">The selected sigma value</param>
-        /// <param name="threshold">The selected threshold
-        /// <returns>The dilated grayscale image.</returns>
-        private byte[,] Task1(byte[,] inputImage,string selectedFilter, byte kernelSize, float sigma, byte threshold)
-        {
-            byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
-            if (selectedFilter == "Gaussian")
-            {
-                float[,] kernel = CreateGaussianFilter(kernelSize, sigma);
-                output = ConvolveImage(inputImage, kernel);
-            }
-
-            else // "Median"
-            {
-                output = MedianFilter(inputImage, (byte)kernelSize);
-            }
-
-            output = EdgeMagnitude(output, PrewittHorizontal, PrewittVertical);
-            
-            output = ThresholdImage(output, threshold);
-            
-            return output;
-        }
-
         // ====================================================================
         // ==================== IMAGE <-> BITMAP HELPERS (given) =============
         // ====================================================================
