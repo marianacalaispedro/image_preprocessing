@@ -249,25 +249,21 @@ namespace ImageApp
 
                         case ProcessingFunctions.BinaryDilateImage:
                         {
-                            bool[,] structElem = {
-                                {true, true, true}, 
-                                {true, true, true},
-                                {true, true, true}                
-                            }; // Define this structuring element yourself
+                            bool[,] structElem = generalStructElem; // Define this structuring element yourself
                             gray = BinaryDilateImage(gray, structElem);
                             break;
                         }
 
                         case ProcessingFunctions.BinaryOpenImage:
                         {
-                            bool[,] structElem = null; // Define this structuring element yourself
+                            bool[,] structElem = generalStructElem; // Define this structuring element yourself
                             gray = BinaryOpenImage(gray, structElem);
                             break;
                         }
 
                         case ProcessingFunctions.BinaryCloseImage:
                         {
-                            bool[,] structElem = null; // Define this structuring element yourself
+                            bool[,] structElem = generalStructElem; // Define this structuring element yourself
                             gray = BinaryCloseImage(gray, structElem);
                             break;
                         }
