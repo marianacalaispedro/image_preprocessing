@@ -900,7 +900,7 @@ namespace ImageApp
             for (int x = 0; x < inputImage.GetLength(0); x++)
             for (int y = 0; y < inputImage.GetLength(1); y++)
             {
-                sum += inputImage[x, y];
+                sum += output[x, y];
             }
             float avg = (float)sum / (inputImage.GetLength(0)*inputImage.GetLength(1));
 
