@@ -699,8 +699,8 @@ namespace ImageApp
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
             // TODO: implement binary dilation
             int structElemSize = structElem.GetLength(0)/2;
-            for (int x = structElemSize; x < inputImage.GetLength(0)-structElemSize; x++)
-            for (int y = structElemSize; y < inputImage.GetLength(1)-structElemSize; y++)
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++)
             {    
                 output[x, y] = BinaryDilate(x, y);
             }
@@ -710,6 +710,7 @@ namespace ImageApp
                 for (int i = -1*structElemSize; i < structElemSize; i++)
                 for (int j = -1*structElemSize; j < structElemSize; j++)
                 {
+                   if (!OutOfBounds(x+i, y+j, inputImage.GetLength(0), inputImage.GetLength(1)))
                    if (inputImage[x+i, y+j] == 255 && structElem[i+structElemSize, j+structElemSize]) return 255;
                 }      
                 return 0;
