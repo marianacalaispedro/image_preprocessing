@@ -386,6 +386,17 @@ namespace ImageApp
         // ==================== FUNCTIONS TO IMPLEMENT =======================
         // ====================================================================
 
+        // general point operation func to reduce for loop usage
+        private byte[,] applyPointOperationToAll(byte[,] inputImage, Func<byte, byte> pointOperation)
+        {
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++) 
+            {
+                inputImage[x, y] = pointOperation(inputImage[x,y]);
+            }
+            return inputImage;
+        }
+
         /// <summary>
         /// Inverts the intensity values of the input grayscale image.
         /// </summary>
@@ -691,7 +702,8 @@ namespace ImageApp
         private byte[,] BinaryErodeImage(byte[,] inputImage, bool[,] structElem)
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
-            // TODO: implement binary erosion
+
+            // invert -> reflect structElem -> apply dilation -> invert
             inputImage = InvertImage(inputImage);
             structElem = ReflectStructElem(structElem);
             output = InvertImage(BinaryDilateImage(inputImage, structElem));
@@ -699,10 +711,12 @@ namespace ImageApp
             return output;
         }
 
+        // reflect structure element on x- AND y-axis
         private bool[,] ReflectStructElem(bool[,] structElem)
         {
             int structElemSize = structElem.GetLength(0);
             bool[,] output = new bool[structElemSize, structElemSize];
+
             for (int x = 0; x < structElemSize; x++)
             for (int y = 0; y < structElemSize; y++)
             {
@@ -721,14 +735,16 @@ namespace ImageApp
         private byte[,] BinaryDilateImage(byte[,] inputImage, bool[,] structElem)
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
-            // TODO: implement binary dilation
+
             int structElemSize = structElem.GetLength(0)/2;
+
             for (int x = 0; x < inputImage.GetLength(0); x++)
             for (int y = 0; y < inputImage.GetLength(1); y++)
             {    
                 output[x, y] = BinaryDilate(x, y);
             }
 
+            // singular application of structElem
             byte BinaryDilate(int x, int y)
             {
                 for (int i = -1*structElemSize; i < structElemSize; i++)
@@ -753,7 +769,6 @@ namespace ImageApp
         private byte[,] BinaryOpenImage(byte[,] inputImage, bool[,] structElem)
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
-            // TODO: implement binary opening
             output = BinaryDilateImage(BinaryErodeImage(inputImage, structElem), structElem);
 
             return output;
@@ -768,7 +783,6 @@ namespace ImageApp
         private byte[,] BinaryCloseImage(byte[,] inputImage, bool[,] structElem)
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
-            // TODO: implement binary closing
             output = BinaryErodeImage(BinaryDilateImage(inputImage, structElem), structElem);
 
             return output;
@@ -886,16 +900,19 @@ namespace ImageApp
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
 
+            // grayscale erode
             int?[,] structElem = CreateGreyStructureElement(structElemSize);
 
             output = GrayscaleErodeImage(inputImage, structElem);
 
+            // get number of distinct intensity value
             int nIntensity = 0;
             for (int intensity = 0; intensity < 256; intensity++)
             {
                 nIntensity += containsIntensityValue(intensity) ? 1 : 0;
             }
 
+            // get average pixel intensity value
             int sum = 0;
             for (int x = 0; x < inputImage.GetLength(0); x++)
             for (int y = 0; y < inputImage.GetLength(1); y++)
@@ -905,9 +922,9 @@ namespace ImageApp
             float avg = (float)sum / (inputImage.GetLength(0)*inputImage.GetLength(1));
 
             Console.WriteLine($"Number of greyscale values: {nIntensity}; Average intensity: {Math.Round(avg, 3)}");
-
             return output;
 
+            // loop over image until given intensity value is found
             bool containsIntensityValue(int intensity)
             {
                 for (int x = 0; x < inputImage.GetLength(0); x++)
@@ -962,16 +979,6 @@ namespace ImageApp
             Marshal.Copy(buffer, 0, fb.Address, totalBytes);
 
             return bmp;
-        }
-
-        private byte[,] applyPointOperationToAll(byte[,] inputImage, Func<byte, byte> pointOperation)
-        {
-            for (int x = 0; x < inputImage.GetLength(0); x++)
-            for (int y = 0; y < inputImage.GetLength(1); y++) 
-            {
-                inputImage[x, y] = pointOperation(inputImage[x,y]);
-            }
-            return inputImage;
         }
     }
 }
