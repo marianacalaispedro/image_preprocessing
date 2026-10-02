@@ -45,6 +45,7 @@ namespace ImageApp
             GrayscaleErodeImage,
             GrayscaleDilateImage,
             Task1,
+            Task2
         }
 
         public MainWindow()
@@ -212,6 +213,12 @@ namespace ImageApp
                 return;
             }
 
+            if (!byte.TryParse(StructElemSizeBox.Text, out byte structElemSize) || structElemSize < 1 || structElemSize % 2 == 0)
+            {
+                StatusText.Text = "StructElem size must be a positive odd integer.";
+                return;
+            }
+
             ApplyButton.IsEnabled = false;
             StatusText.Text = "Processing...";
 
@@ -227,8 +234,6 @@ namespace ImageApp
                     // operation always starts from the original loaded image, never chained
                     // from a previous Apply's result.
                     byte[,] gray = ConvertToGrayscale(colorPixels);
-
-                    int structElemSize = 11;
                     bool[,] generalStructElem = new bool[structElemSize, structElemSize];
                     for (int x = 0; x < structElemSize; x++)
                     for (int y = 0; y < structElemSize; y++)
@@ -319,6 +324,12 @@ namespace ImageApp
                         {
                             gray = Task1(gray, selectedFilter, kernelSize, sigma, threshold);
                             break;
+                        }
+
+                        case ProcessingFunctions.Task2:
+                        {
+                            gray = Task2(gray, structElemSize);   
+                            break;     
                         }
 
                         default:
@@ -462,6 +473,19 @@ namespace ImageApp
             }
 
             return filter;
+        }
+
+        private int?[,] CreateGreyStructureElement(byte size)
+        {
+            int?[,] greyStructElem = new int?[size, size];
+
+            for (int x = 0; x < size; x++)
+            for (int y = 0; y < size; y++)
+            {
+                greyStructElem[x, y] = 1;        
+            }
+
+            return greyStructElem;
         }
 
         /// <summary>
@@ -856,6 +880,43 @@ namespace ImageApp
             output = ThresholdImage(output, threshold);
             
             return output;
+        }
+
+        private byte[,] Task2(byte[,] inputImage, byte structElemSize)
+        {
+            byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
+
+            int?[,] structElem = CreateGreyStructureElement(structElemSize);
+
+            output = GrayscaleErodeImage(inputImage, structElem);
+
+            int nIntensity = 0;
+            for (int intensity = 0; intensity < 256; intensity++)
+            {
+                nIntensity += containsIntensityValue(intensity) ? 1 : 0;
+            }
+
+            int sum = 0;
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
+                sum += inputImage[x, y];
+            }
+            float avg = (float)sum / (inputImage.GetLength(0)*inputImage.GetLength(1));
+
+            Console.WriteLine($"Number of greyscale values: {nIntensity}; Average intensity: {Math.Round(avg, 3)}");
+
+            return output;
+
+            bool containsIntensityValue(int intensity)
+            {
+                for (int x = 0; x < inputImage.GetLength(0); x++)
+                for (int y = 0; y < inputImage.GetLength(1); y++)
+                {
+                    if (output[x, y] == intensity) return true;        
+                }
+                return false;
+            }
         }
 
         // ====================================================================
