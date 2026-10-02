@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
+using System.IO.Compression;
 
 namespace ImageApp
 {
@@ -45,6 +46,7 @@ namespace ImageApp
             GrayscaleErodeImage,
             GrayscaleDilateImage,
             Task1,
+            HistogramEqualization,
         }
 
         public MainWindow()
@@ -318,6 +320,12 @@ namespace ImageApp
                         case ProcessingFunctions.Task1:
                         {
                             gray = Task1(gray, selectedFilter, kernelSize, sigma, threshold);
+                            break;
+                        }
+
+                        case ProcessingFunctions.HistogramEqualization:
+                        {
+                            gray = HistogramEqualization(gray);
                             break;
                         }
 
@@ -836,6 +844,7 @@ namespace ImageApp
         /// <param name="sigma">The selected sigma value</param>
         /// <param name="threshold">The selected threshold
         /// <returns>The dilated grayscale image.</returns>
+        
         private byte[,] Task1(byte[,] inputImage,string selectedFilter, byte kernelSize, float sigma, byte threshold)
         {
             byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
@@ -857,6 +866,48 @@ namespace ImageApp
             return output;
         }
 
+        /// <summary>
+        /// Makes the cumilitive histogram uniform. 
+        /// </summary>
+        /// <param name="inputImage">The 2D input grayscale image.</param>
+        /// <returns>A binary image whit its comulative histogram equalized.</returns>
+        private byte[,] HistogramEqualization(byte[,] inputImage)
+        {
+            // create temporary grayscale image
+            byte[,] tempImage = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
+            
+            // creating the histogram
+            int[] histogram = new int[256];
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
+                histogram[inputImage[x, y]]++; 
+            }
+
+            int [] cumulativeHistogram = new int[256];
+            int running = 0;
+            for (int val = 0; val < histogram.Length; val++)
+            {
+                running += histogram[val];
+                cumulativeHistogram[val] = running;
+            }
+
+            byte [] equalizedHistogram = new byte[256];
+            for (int val = 0; val < cumulativeHistogram.Length; val++)
+            {
+                byte equalizedVal = (byte) (cumulativeHistogram[val] * (256 - 1)/ cumulativeHistogram[255]);
+                if (equalizedVal > 255) equalizedVal = 255;
+                equalizedHistogram[val] = equalizedVal;
+            }
+
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
+                tempImage[x, y] = equalizedHistogram[inputImage[x,y]];
+            }
+
+            return tempImage;
+        }
         // ====================================================================
         // ==================== IMAGE <-> BITMAP HELPERS (given) =============
         // ====================================================================
