@@ -46,8 +46,8 @@ namespace ImageApp
             GrayscaleErodeImage,
             GrayscaleDilateImage,
             Task1,
-             HistogramEqualization,
-             Task2
+            HistogramEqualization,
+            Task2
         }
 
         public MainWindow()
