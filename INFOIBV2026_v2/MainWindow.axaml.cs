@@ -46,8 +46,10 @@ namespace ImageApp
             GrayscaleErodeImage,
             GrayscaleDilateImage,
             Task1,
+            Task2,
+            Task3,
             HistogramEqualization,
-            Task2
+            
         }
 
         public MainWindow()
@@ -332,6 +334,12 @@ namespace ImageApp
                         {
                             gray = Task2(gray, structElemSize);   
                             break;     
+                        }
+
+                        case ProcessingFunctions.Task3:
+                        {
+                            gray = Task3(gray, structElemSize);
+                            break;        
                         }
 
                         case ProcessingFunctions.HistogramEqualization:
@@ -943,6 +951,31 @@ namespace ImageApp
                 }
                 return false;
             }
+        }
+
+        private byte[,] Task3(byte[,] inputImage, byte structElemSize)
+        {
+            byte[,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
+
+            bool[,] structElem = new bool[structElemSize, structElemSize];
+            for (int x = 0; x < structElemSize; x++)
+            for (int y = 0; y < structElemSize; y++)
+            {
+                structElem[x, y] = true;                            
+            }
+
+            output = BinaryCloseImage(inputImage, structElem);
+
+            int nForeground = 0;
+            for (int x = 0; x < output.GetLength(0); x++)
+            for (int y = 0; y < output.GetLength(1); y++)
+            {
+                nForeground += (output[x,y] == 255) ? 1 : 0; 
+            }
+
+            Console.WriteLine($"Number of foreground: {nForeground}");
+
+            return output;
         }
 
         /// <summary>
