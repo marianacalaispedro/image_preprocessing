@@ -763,8 +763,8 @@ namespace ImageApp
             // singular application of structElem
             byte BinaryDilate(int x, int y)
             {
-                for (int i = -1*structElemSize; i < structElemSize; i++)
-                for (int j = -1*structElemSize; j < structElemSize; j++)
+                for (int i = -1*structElemSize; i <= structElemSize; i++)
+                for (int j = -1*structElemSize; j <= structElemSize; j++)
                 {
                    if (!OutOfBounds(x+i, y+j, inputImage.GetLength(0), inputImage.GetLength(1)))
                    if (inputImage[x+i, y+j] == 255 && structElem[i+structElemSize, j+structElemSize]) return 255;
