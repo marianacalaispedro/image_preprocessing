@@ -1036,11 +1036,10 @@ namespace ImageApp
             int w = inputImage.GetLength(0);
             int h = inputImage.GetLength(1);
 
-            // Labels start at 2 (0 = background, 1 reserved/unused, ≥2 = region labels)
             int currentLastLabel = 2;
             int[,] labeledImage = new int[w, h];
 
-            // ---------- Pass 1: sequential labeling (8-neighborhood) ----------
+        
             for (int x = 0; x < w; x++)
             for (int y = 0; y < h; y++)
             {
@@ -1051,8 +1050,8 @@ namespace ImageApp
                 for (int xn = x - 1; xn <= x + 1; xn++)
                 for (int yn = y - 1; yn <= y + 1; yn++)
                 {
-                    if (xn == x && yn == y) continue;                         // skip center
-                    if (xn < 0 || yn < 0 || xn >= w || yn >= h) continue;     // bounds
+                    if (xn == x && yn == y) continue;                         
+                    if (xn < 0 || yn < 0 || xn >= w || yn >= h) continue;     
                     if (labeledImage[xn, yn] >= 2)
                         possibleLabels.Add(labeledImage[xn, yn]);
                 }
@@ -1071,14 +1070,13 @@ namespace ImageApp
                 }
             }
 
-            // ---------- Pass 2: resolve label collisions ----------
-            // Labels in use are 2 .. currentLastLabel  →  (currentLastLabel - 1) distinct labels.
+            // resolving label collisions 
             int labelCount = currentLastLabel - 1;
             if (labelCount > 0)
             {
                 int[,] labelConnectionsCount = new int[labelCount, labelCount];
 
-                int Idx(int label) => label - 2;   // label 2 → 0, label 3 → 1, ...
+                int Idx(int label) => label - 2;   
 
                 for (int x = 0; x < w; x++)
                 for (int y = 0; y < h; y++)
@@ -1098,13 +1096,12 @@ namespace ImageApp
                     }
                 }
 
-                // Symmetric-ize so we can scan one triangle
+                
                 int[,] condensed = new int[labelCount, labelCount];
                 for (int i = 0; i < labelCount; i++)
                 for (int j = 0; j < labelCount; j++)
                     condensed[i, j] = labelConnectionsCount[i, j] + labelConnectionsCount[j, i];
 
-                // Merge: for every connected pair (l1 > l2), relabel l1's pixels to l2.
                 for (int l1 = labelCount - 1; l1 >= 1; l1--)
                 for (int l2 = l1 - 1; l2 >= 0; l2--)
                 {
@@ -1119,15 +1116,12 @@ namespace ImageApp
                             labeledImage[x, y] = lowLabel;
                 }
             }
-
-            // ---------- Output: byte label image, background = 0, labels ≥ 2 ----------
-            // Spec guarantees < 254 regions, so labels fit in byte (max ~255).
+            
             byte[,] labelImage = new byte[w, h];
             for (int x = 0; x < w; x++)
             for (int y = 0; y < h; y++)
                 labelImage[x, y] = (byte)labeledImage[x, y];   // 0 stays 0, labels 2.. are kept
 
-            // ---------- Visualize: spread labels across full range ----------
             return AdjustContrast(labelImage);
         }
                     
