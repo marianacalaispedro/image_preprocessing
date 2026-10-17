@@ -49,6 +49,7 @@ namespace ImageApp
             Task2,
             Task3,
             HistogramEqualization,
+            SequentialRegionLabeling,
             
         }
 
@@ -348,6 +349,12 @@ namespace ImageApp
                             break;
                         }
 
+                        case ProcessingFunctions.SequentialRegionLabeling:
+                        {
+                            gray = SequentialRegionLabeling(gray);
+                            break;
+                        }
+                        
                         default:
                             throw new NotSupportedException($"Operation '{selected}' is not implemented in the OnApply switch.");
                     }
@@ -637,7 +644,7 @@ namespace ImageApp
             // create temporary grayscale image
             byte[,] tempImage = new byte[inputImage.GetLength(0), inputImage.GetLength(1)];
 
-            // TODO: add your functionality and checks, think about border handling and type conversion (negative values!)
+            
             List<sbyte[,]> kernels = new List<sbyte[,]>{horizontalKernel, verticalKernel};
 
             int padding = horizontalKernel.GetLength(0) / 2;
@@ -1020,6 +1027,110 @@ namespace ImageApp
 
             return tempImage;
         }
+
+        private byte[,] SequentialRegionLabeling(byte[,] inputImage)
+        {
+            const byte pForeground = 255; 
+            const int pBackground = 0;
+
+            int w = inputImage.GetLength(0);
+            int h = inputImage.GetLength(1);
+
+            // Labels start at 2 (0 = background, 1 reserved/unused, ≥2 = region labels)
+            int currentLastLabel = 2;
+            int[,] labeledImage = new int[w, h];
+
+            // ---------- Pass 1: sequential labeling (8-neighborhood) ----------
+            for (int x = 0; x < w; x++)
+            for (int y = 0; y < h; y++)
+            {
+                if (inputImage[x, y] != pForeground) continue;
+
+                var possibleLabels = new List<int>();
+
+                for (int xn = x - 1; xn <= x + 1; xn++)
+                for (int yn = y - 1; yn <= y + 1; yn++)
+                {
+                    if (xn == x && yn == y) continue;                         // skip center
+                    if (xn < 0 || yn < 0 || xn >= w || yn >= h) continue;     // bounds
+                    if (labeledImage[xn, yn] >= 2)
+                        possibleLabels.Add(labeledImage[xn, yn]);
+                }
+
+                if (possibleLabels.Count > 0)
+                {
+                    int minLabel = possibleLabels[0];
+                    for (int k = 1; k < possibleLabels.Count; k++)
+                        if (possibleLabels[k] < minLabel) minLabel = possibleLabels[k];
+                    labeledImage[x, y] = minLabel;
+                }
+                else
+                {
+                    currentLastLabel++;
+                    labeledImage[x, y] = currentLastLabel;
+                }
+            }
+
+            // ---------- Pass 2: resolve label collisions ----------
+            // Labels in use are 2 .. currentLastLabel  →  (currentLastLabel - 1) distinct labels.
+            int labelCount = currentLastLabel - 1;
+            if (labelCount > 0)
+            {
+                int[,] labelConnectionsCount = new int[labelCount, labelCount];
+
+                int Idx(int label) => label - 2;   // label 2 → 0, label 3 → 1, ...
+
+                for (int x = 0; x < w; x++)
+                for (int y = 0; y < h; y++)
+                {
+                    if (labeledImage[x, y] < 2) continue;
+
+                    for (int xn = x - 1; xn <= x + 1; xn++)
+                    for (int yn = y - 1; yn <= y + 1; yn++)
+                    {
+                        if (xn == x && yn == y) continue;
+                        if (xn < 0 || yn < 0 || xn >= w || yn >= h) continue;
+
+                        int a = labeledImage[xn, yn];
+                        int b = labeledImage[x, y];
+                        if (a >= 2 && a != b)
+                            labelConnectionsCount[Idx(a), Idx(b)]++;
+                    }
+                }
+
+                // Symmetric-ize so we can scan one triangle
+                int[,] condensed = new int[labelCount, labelCount];
+                for (int i = 0; i < labelCount; i++)
+                for (int j = 0; j < labelCount; j++)
+                    condensed[i, j] = labelConnectionsCount[i, j] + labelConnectionsCount[j, i];
+
+                // Merge: for every connected pair (l1 > l2), relabel l1's pixels to l2.
+                for (int l1 = labelCount - 1; l1 >= 1; l1--)
+                for (int l2 = l1 - 1; l2 >= 0; l2--)
+                {
+                    if (condensed[l1, l2] <= 0) continue;
+
+                    int highLabel = l1 + 2;
+                    int lowLabel  = l2 + 2;
+
+                    for (int x = 0; x < w; x++)
+                    for (int y = 0; y < h; y++)
+                        if (labeledImage[x, y] == highLabel)
+                            labeledImage[x, y] = lowLabel;
+                }
+            }
+
+            // ---------- Output: byte label image, background = 0, labels ≥ 2 ----------
+            // Spec guarantees < 254 regions, so labels fit in byte (max ~255).
+            byte[,] labelImage = new byte[w, h];
+            for (int x = 0; x < w; x++)
+            for (int y = 0; y < h; y++)
+                labelImage[x, y] = (byte)labeledImage[x, y];   // 0 stays 0, labels 2.. are kept
+
+            // ---------- Visualize: spread labels across full range ----------
+            return AdjustContrast(labelImage);
+        }
+                    
         // ====================================================================
         // ==================== IMAGE <-> BITMAP HELPERS (given) =============
         // ====================================================================
