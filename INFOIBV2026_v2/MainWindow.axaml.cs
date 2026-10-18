@@ -1144,20 +1144,36 @@ namespace ImageApp
             int maxR = (inputImage.GetLength(0) - 1 - offsetX + inputImage.GetLength(1) - 1 - offsetY);
             byte[,] accumArr = new byte[360/thetaStepSize, 2*maxR];
 
-            for (int x = 0; x < inputImage.GetLength(0); x++)
-            for (int y = 0; y < inputImage.GetLength(1); y++)
+            // for (int x = 0; x < inputImage.GetLength(0); x++)
+            // for (int y = 0; y < inputImage.GetLength(1); y++)
+            // {
+            //     if (inputImage[x,y] > 0) 
+            //     {    
+            //         for (float theta = 0; theta < 360; theta += thetaStepSize)
+            //         {
+            //             float rF = (x - offsetX) * MathF.Cos(theta / 180.0f * MathF.PI) + (y - offsetY) * MathF.Sin(theta / 180.0f * MathF.PI);
+            //             int r = (int)MathF.Round(rF * rLoD) / rLoD;
+            //             if (isBinary) accumArr[(int)theta, r + maxR]++;
+            //             else accumArr[(int)theta, r + maxR] += accumArr[x, y];
+            //         }
+            //     }        
+            // }
+
+            Parallel.For(0, inputImage.GetLength(0), (x) => {
+            Parallel.For(0, inputImage.GetLength(1), (y) =>
             {
                 if (inputImage[x,y] > 0) 
                 {    
-                    for (int theta = 0; theta < 360; theta += thetaStepSize)
+                    for (float theta = 0; theta < 360; theta += thetaStepSize)
                     {
-                        float rF = (x - offsetX) * MathF.Cos(theta) + (y - offsetY) * MathF.Sin(theta);
+                        float rF = (x - offsetX) * MathF.Cos(theta / 180.0f * MathF.PI) + (y - offsetY) * MathF.Sin(theta / 180.0f * MathF.PI);
                         int r = (int)MathF.Round(rF * rLoD) / rLoD;
-                        if (isBinary) accumArr[theta, r + maxR]++;
-                        else accumArr[theta, r + maxR] += accumArr[x, y];
+                        if (isBinary) accumArr[(int)theta, r + maxR]++;
+                        else accumArr[(int)theta, r + maxR] += inputImage[x, y];
                     }
                 }        
-            }
+            });
+            });
 
             return AdjustContrast(accumArr);
         }
