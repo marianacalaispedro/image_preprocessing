@@ -51,6 +51,7 @@ namespace ImageApp
             HistogramEqualization,
             SequentialRegionLabeling,
             HoughTransform,
+            HoughLineSegments,
         }
 
         public MainWindow()
@@ -359,6 +360,17 @@ namespace ImageApp
                         {
                             gray = HoughTransform(gray);
                             break;
+                        }
+
+                        case ProcessingFunctions.HoughLineSegments:
+                        {
+                            List<(int, int)> listOfPeaks;
+                            int minIntensityThreshold = 0;
+                            int minSegmentLength = 0;
+                            int maxGapParameter = 0;
+                            (byte[,] output, List<((int, int), (int, int))> lines) = HoughLineSegments(gray, listOfPeaks, minIntensityThreshold, minSegmentLength, maxGapParameter);
+                            gray = output;
+                            break;  
                         }
                         
                         default:
@@ -1176,6 +1188,28 @@ namespace ImageApp
             });
 
             return AdjustContrast(accumArr);
+        }
+
+        private (byte[,], List<((int, int), (int, int))>) HoughLineSegments(byte[,] inputImage, List<(int, int)> peaks, int minThresh, int minSegLen, int maxGap)
+        {
+            byte[,] output = inputImage;
+            List<((int, int), (int, int))> lines = new List<((int, int), (int, int))>();
+
+            Parallel.ForEach(peaks, pair => {
+                int theta = pair.Item1;
+                List<(int, int)> maybeOnLine = new List<(int, int)>();
+                for (int x = 0; x < inputImage.GetLength(0); x++)
+                {
+                    int y = (int)Math.Floor(pair.Item2 - x*MathF.Cos(theta) / x*MathF.Sin(theta));
+                    if (inputImage[x, y] > minThresh)
+                    {
+                        maybeOnLine.Add((x, y));
+                        output[x, y] = 
+                    }
+                }
+            });
+
+            return (output, lines);
         }
                     
         // ====================================================================
