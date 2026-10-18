@@ -50,7 +50,7 @@ namespace ImageApp
             Task3,
             HistogramEqualization,
             SequentialRegionLabeling,
-            
+            HoughTransform,
         }
 
         public MainWindow()
@@ -352,6 +352,12 @@ namespace ImageApp
                         case ProcessingFunctions.SequentialRegionLabeling:
                         {
                             gray = SequentialRegionLabeling(gray);
+                            break;
+                        }
+
+                        case ProcessingFunctions.HoughTransform:
+                        {
+                            gray = HoughTransform(gray);
                             break;
                         }
                         
@@ -1123,6 +1129,37 @@ namespace ImageApp
                 labelImage[x, y] = (byte)labeledImage[x, y];   // 0 stays 0, labels 2.. are kept
 
             return AdjustContrast(labelImage);
+        }
+
+        private byte[,] HoughTransform(byte[,] inputImage)
+        {
+            int thetaStepSize = 1;
+            int rLoD = 1;
+
+            bool isBinary = true;
+            
+            int offsetX = inputImage.GetLength(0)/2;
+            int offsetY = inputImage.GetLength(1)/2;
+
+            int maxR = (inputImage.GetLength(0) - 1 - offsetX + inputImage.GetLength(1) - 1 - offsetY);
+            byte[,] accumArr = new byte[360/thetaStepSize, 2*maxR];
+
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
+                if (inputImage[x,y] > 0) 
+                {    
+                    for (int theta = 0; theta < 360; theta += thetaStepSize)
+                    {
+                        float rF = (x - offsetX) * MathF.Cos(theta) + (y - offsetY) * MathF.Sin(theta);
+                        int r = (int)MathF.Round(rF * rLoD) / rLoD;
+                        if (isBinary) accumArr[theta, r + maxR]++;
+                        else accumArr[theta, r + maxR] += accumArr[x, y];
+                    }
+                }        
+            }
+
+            return AdjustContrast(accumArr);
         }
                     
         // ====================================================================
