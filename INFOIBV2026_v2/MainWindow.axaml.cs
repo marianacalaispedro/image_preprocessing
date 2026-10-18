@@ -372,8 +372,8 @@ namespace ImageApp
 
                         case ProcessingFunctions.HoughLineSegments:
                         {
-                            List<(int, int)> listOfPeaks;
-                            int minIntensityThreshold = 0;
+                            List<(int, int)> listOfPeaks = [(50, 50), (0, 0), (20, 20)];
+                            int minIntensityThreshold = 50;
                             int minSegmentLength = 0;
                             int maxGapParameter = 0;
                             (byte[,,] output, List<((int, int), (int, int))> lines) = HoughLineSegments(gray, listOfPeaks, minIntensityThreshold, minSegmentLength, maxGapParameter);
@@ -1223,10 +1223,19 @@ namespace ImageApp
             Parallel.ForEach(peaks, pair => {
                 int theta = pair.Item1;
                 List<(int, int)> maybeOnLine = new List<(int, int)>();
+
+                // get 'on' pixels
                 for (int x = 0; x < inputImage.GetLength(0); x++)
                 {
                     int y = (int)Math.Floor(pair.Item2 - x*MathF.Cos(theta) / x*MathF.Sin(theta));
                     if (inputImage[x, y] > minThresh) maybeOnLine.Add((x, y));
+                }
+
+                // check len and add lines to output image
+                if (maybeOnLine.Count >= minSegLen)
+                {
+                    lines.Add((maybeOnLine[0], maybeOnLine[maybeOnLine.Count-1]));
+                    foreach ((int, int) point in maybeOnLine) output[point.Item1, point.Item2, 0] = 255;
                 }
             });
 
