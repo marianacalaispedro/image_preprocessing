@@ -19,7 +19,7 @@ namespace ImageApp
         private static readonly sbyte[,] PrewittVertical   = { {-1, -1, -1}, {0, 0, 0}, {1, 1, 1} };
         private WriteableBitmap? _loadedBitmap; // the raw loaded image, kept in color, for display in OriginalImage
         private byte[,,]? _loadedColorPixels; // [x, y, channel] with channel 0=R, 1=G, 2=B -- extracted once at load time
-        private byte[,]? _processedGray; // Processed grayscale values (nullable)
+        private object? _processedResult; // Processed grayscale values (nullable)
 
         // Simple fixed defaults used by the functions below until you add your own
         // GUI controls (TextBoxes, ComboBoxes, etc.) to let the user set these values.
@@ -124,7 +124,7 @@ namespace ImageApp
                     }
                 }
 
-                _processedGray = null;
+                _processedResult = null;
                 (OriginalImage.Source as IDisposable)?.Dispose();
                 OriginalImage.Source = _loadedBitmap;
                 (ProcessedImage.Source as IDisposable)?.Dispose();
@@ -142,7 +142,7 @@ namespace ImageApp
         /// </summary>
         private async void OnSaveImage(object? sender, RoutedEventArgs e)
         {
-            if (_processedGray == null)
+            if (_processedResult == null)
             {
                 StatusText.Text = "No processed image to save. Apply an operation first.";
                 return;
@@ -169,7 +169,13 @@ namespace ImageApp
                 if (file == null)
                     return;
 
-                using var bmp = ByteArrayToBitmap(_processedGray);
+                using var bmp = _processedResult switch
+                {
+                    byte[,,] colorImg => ColorArrayToBitmap(colorImg),
+                    byte[,] grayImg => ByteArrayToBitmap(grayImg),
+                    _ => throw new NotSupportedException()
+                };
+
                 await using var stream = await file.OpenWriteAsync();
                 bmp.Save(stream);
                 StatusText.Text = "Processed image saved successfully.";
@@ -240,6 +246,8 @@ namespace ImageApp
                     // operation always starts from the original loaded image, never chained
                     // from a previous Apply's result.
                     byte[,] gray = ConvertToGrayscale(colorPixels);
+                    object result = gray;
+
                     bool[,] generalStructElem = new bool[structElemSize, structElemSize];
                     for (int x = 0; x < structElemSize; x++)
                     for (int y = 0; y < structElemSize; y++)
@@ -264,101 +272,101 @@ namespace ImageApp
                             // so nothing further is needed here.
                             break;
                         case ProcessingFunctions.InvertImage:
-                            gray = InvertImage(gray);
+                            result = InvertImage(gray);
                             break;
                         case ProcessingFunctions.AdjustContrast:
-                            gray = AdjustContrast(gray);
+                            result = AdjustContrast(gray);
                             break;
                         case ProcessingFunctions.ConvolveImage:
-                            gray = ConvolveImage(gray, CreateGaussianFilter(5, 1.0f));
+                            result = ConvolveImage(gray, CreateGaussianFilter(5, 1.0f));
                             break;
                         case ProcessingFunctions.MedianFilter:
-                            gray = MedianFilter(gray, 5);
+                            result = MedianFilter(gray, 5);
                             break;
                         case ProcessingFunctions.EdgeMagnitude:
                         {
-                            gray = EdgeMagnitude(gray, PrewittHorizontal, PrewittVertical);
+                            result = EdgeMagnitude(gray, PrewittHorizontal, PrewittVertical);
                             break;
                         }
                         case ProcessingFunctions.ThresholdImage:
-                            gray = ThresholdImage(gray, _threshold);
+                            result = ThresholdImage(gray, _threshold);
                             break;
 
                         case ProcessingFunctions.BinaryErodeImage:
                         {
                             bool[,] structElem = generalStructElem; // Define this structuring element yourself
-                            gray = BinaryErodeImage(gray, structElem);
+                            result = BinaryErodeImage(gray, structElem);
                             break;
                         }
 
                         case ProcessingFunctions.BinaryDilateImage:
                         {
                             bool[,] structElem = generalStructElem; // Define this structuring element yourself
-                            gray = BinaryDilateImage(gray, structElem);
+                            result = BinaryDilateImage(gray, structElem);
                             break;
                         }
 
                         case ProcessingFunctions.BinaryOpenImage:
                         {
                             bool[,] structElem = generalStructElem; // Define this structuring element yourself
-                            gray = BinaryOpenImage(gray, structElem);
+                            result = BinaryOpenImage(gray, structElem);
                             break;
                         }
 
                         case ProcessingFunctions.BinaryCloseImage:
                         {
                             bool[,] structElem = generalStructElem; // Define this structuring element yourself
-                            gray = BinaryCloseImage(gray, structElem);
+                            result = BinaryCloseImage(gray, structElem);
                             break;
                         }
 
                         case ProcessingFunctions.GrayscaleErodeImage:
                         {
                             int?[,] grayStructElem = structElemGrey; // Define this structuring element yourself
-                            gray = GrayscaleErodeImage(gray, grayStructElem);
+                            result = GrayscaleErodeImage(gray, grayStructElem);
                             break;
                         }
 
                         case ProcessingFunctions.GrayscaleDilateImage:
                         {
                             int?[,] grayStructElem = structElemGrey; // Define this structuring element yourself
-                            gray = GrayscaleDilateImage(gray, grayStructElem);
+                            result = GrayscaleDilateImage(gray, grayStructElem);
                             break;
                         }
 
                         case ProcessingFunctions.Task1:
                         {
-                            gray = Task1(gray, selectedFilter, kernelSize, sigma, threshold);
+                            result = Task1(gray, selectedFilter, kernelSize, sigma, threshold);
                             break;
                         }
 
                         case ProcessingFunctions.Task2:
                         {
-                            gray = Task2(gray, structElemSize);   
+                            result = Task2(gray, structElemSize);   
                             break;     
                         }
 
                         case ProcessingFunctions.Task3:
                         {
-                            gray = Task3(gray, structElemSize);
+                            result = Task3(gray, structElemSize);
                             break;        
                         }
 
                         case ProcessingFunctions.HistogramEqualization:
                         {
-                            gray = HistogramEqualization(gray);
+                            result = HistogramEqualization(gray);
                             break;
                         }
 
                         case ProcessingFunctions.SequentialRegionLabeling:
                         {
-                            gray = SequentialRegionLabeling(gray);
+                            result = SequentialRegionLabeling(gray);
                             break;
                         }
 
                         case ProcessingFunctions.HoughTransform:
                         {
-                            gray = HoughTransform(gray);
+                            result = HoughTransform(gray);
                             break;
                         }
 
@@ -368,8 +376,8 @@ namespace ImageApp
                             int minIntensityThreshold = 0;
                             int minSegmentLength = 0;
                             int maxGapParameter = 0;
-                            (byte[,] output, List<((int, int), (int, int))> lines) = HoughLineSegments(gray, listOfPeaks, minIntensityThreshold, minSegmentLength, maxGapParameter);
-                            gray = output;
+                            (byte[,,] output, List<((int, int), (int, int))> lines) = HoughLineSegments(gray, listOfPeaks, minIntensityThreshold, minSegmentLength, maxGapParameter);
+                            result = output;
                             break;  
                         }
                         
@@ -377,11 +385,16 @@ namespace ImageApp
                             throw new NotSupportedException($"Operation '{selected}' is not implemented in the OnApply switch.");
                     }
 
-                    var bmp = ByteArrayToBitmap(gray);
+                    var bmp = result switch 
+                    {
+                        byte[,,] colorImg => ColorArrayToBitmap(colorImg),
+                        byte[,] grayImg => ByteArrayToBitmap(gray),
+                        _ => throw new NotSupportedException()
+                    };
                     return (gray, bmp);
                 });
 
-                _processedGray = resultGray;
+                _processedResult = resultGray;
                 (ProcessedImage.Source as IDisposable)?.Dispose();
                 ProcessedImage.Source = resultBmp;
                 StatusText.Text = $"Completed {selected}.";
@@ -1190,9 +1203,21 @@ namespace ImageApp
             return AdjustContrast(accumArr);
         }
 
-        private (byte[,], List<((int, int), (int, int))>) HoughLineSegments(byte[,] inputImage, List<(int, int)> peaks, int minThresh, int minSegLen, int maxGap)
+        private (byte[,,], List<((int, int), (int, int))>) HoughLineSegments(byte[,] inputImage, List<(int, int)> peaks, int minThresh, int minSegLen, int maxGap)
         {
-            byte[,] output = inputImage;
+            byte[,,] output = new byte[inputImage.GetLength(0), inputImage.GetLength(1), 3];
+
+            // make inputImage a color image
+            Parallel.For(0, inputImage.GetLength(0), x =>
+            {
+                for (int y = 0; y < inputImage.GetLength(1); y++) 
+                {
+                    output[x, y, 0] = inputImage[x, y];
+                    output[x, y, 1] = inputImage[x, y];
+                    output[x, y, 2] = inputImage[x, y];
+                }
+            });
+
             List<((int, int), (int, int))> lines = new List<((int, int), (int, int))>();
 
             Parallel.ForEach(peaks, pair => {
@@ -1201,11 +1226,7 @@ namespace ImageApp
                 for (int x = 0; x < inputImage.GetLength(0); x++)
                 {
                     int y = (int)Math.Floor(pair.Item2 - x*MathF.Cos(theta) / x*MathF.Sin(theta));
-                    if (inputImage[x, y] > minThresh)
-                    {
-                        maybeOnLine.Add((x, y));
-                        output[x, y] = 
-                    }
+                    if (inputImage[x, y] > minThresh) maybeOnLine.Add((x, y));
                 }
             });
 
@@ -1254,6 +1275,29 @@ namespace ImageApp
 
             Marshal.Copy(buffer, 0, fb.Address, totalBytes);
 
+            return bmp;
+        }
+
+        private WriteableBitmap ColorArrayToBitmap(byte[,,] color)
+        {
+            int w = color.GetLength(0);
+            int h = color.GetLength(1);
+            var bmp = new WriteableBitmap(new PixelSize(w, h), new(96, 96), PixelFormat.Rgba8888, AlphaFormat.Opaque);
+            using var fb = bmp.Lock();
+            byte[] buffer = new byte[fb.RowBytes * h];
+            for (int y = 0; y < h; y++)
+            {
+                int rowStart = y * fb.RowBytes;
+                for (int x = 0; x < w; x++)
+                {
+                    int idx = rowStart + x * 4;
+                    buffer[idx + 0] = color[x, y, 0]; // R
+                    buffer[idx + 1] = color[x, y, 1]; // G
+                    buffer[idx + 2] = color[x, y, 2]; // B
+                    buffer[idx + 3] = 255;
+                }
+            }
+            Marshal.Copy(buffer, 0, fb.Address, buffer.Length);
             return bmp;
         }
     }
