@@ -437,7 +437,7 @@ namespace ImageApp
                         byte[,] grayImg => ByteArrayToBitmap(grayImg),
                         _ => throw new NotSupportedException()
                     };
-                    return (gray, bmp);
+                    return (result, bmp);
                 });
 
                 _processedResult = resultGray;
@@ -1205,7 +1205,7 @@ namespace ImageApp
         private byte[,] HoughTransform(byte[,] inputImage)
         {
             int thetaStepSize = 1;
-            int rLoD = 1;
+            int rLoD = 2;
             
             int offsetX = inputImage.GetLength(0)/2;
             int offsetY = inputImage.GetLength(1)/2;
@@ -1225,7 +1225,7 @@ namespace ImageApp
             {
                 if (inputImage[x,y] > 0) 
                 {    
-                    for (float theta = 0; theta < 360; theta += thetaStepSize)
+                    for (float theta = 0; theta < 360/thetaStepSize; theta += thetaStepSize)
                     {
                         float rF = (x - offsetX) * MathF.Cos(theta / 180.0f * MathF.PI) + (y - offsetY) * MathF.Sin(theta / 180.0f * MathF.PI);
                         int r = (int)MathF.Round(rF * rLoD) / rLoD;
