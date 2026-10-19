@@ -9,6 +9,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using System.IO.Compression;
+using Avalonia.Media;
 
 namespace ImageApp
 {
@@ -52,6 +53,8 @@ namespace ImageApp
             SequentialRegionLabeling,
             HoughTransform,
             HoughLineSegments,
+            BinaryPipeline,
+            GrayscalePipeline,
         }
 
         public MainWindow()
@@ -231,6 +234,36 @@ namespace ImageApp
                 return;
             }
 
+            if (!byte.TryParse(StructElemSizeBox.Text, out byte t_mag))
+            {
+                StatusText.Text = "t_mag must be an integer between 0-255.";
+                return;
+            }
+
+            if (!byte.TryParse(StructElemSizeBox.Text, out byte t_peak))
+            {
+                StatusText.Text = "t_peak must be an integer between 0-255.";
+                return;
+            }
+
+            if (!byte.TryParse(StructElemSizeBox.Text, out byte minThresh))
+            {
+                StatusText.Text = "Minimum intensity must be an integer between 0-255.";
+                return;
+            }
+
+            if (!byte.TryParse(StructElemSizeBox.Text, out byte minSegLen))
+            {
+                StatusText.Text = "t_mag must be an integer.";
+                return;
+            }
+
+            if (!byte.TryParse(StructElemSizeBox.Text, out byte maxGap))
+            {
+                StatusText.Text = "t_mag must be an integer.";
+                return;
+            }
+
             ApplyButton.IsEnabled = false;
             StatusText.Text = "Processing...";
 
@@ -379,6 +412,18 @@ namespace ImageApp
                             (byte[,,] output, List<((int, int), (int, int))> lines) = HoughLineSegments(gray, listOfPeaks, minIntensityThreshold, minSegmentLength, maxGapParameter);
                             result = output;
                             break;  
+                        }
+
+                        case ProcessingFunctions.BinaryPipeline:
+                        {
+                            result = BinaryPipeline(gray, t_mag, t_peak, minThresh, minSegLen, maxGap);
+                            break;
+                        }
+
+                        case ProcessingFunctions.GrayscalePipeline:
+                        {
+                            result = GrayscalePipeline(gray, t_peak, minThresh, minSegLen, maxGap);
+                            break; 
                         }
                         
                         default:
@@ -1169,21 +1214,6 @@ namespace ImageApp
             int maxR = (inputImage.GetLength(0) - 1 - offsetX + inputImage.GetLength(1) - 1 - offsetY);
             byte[,] accumArr = new byte[360/thetaStepSize, 2*maxR];
 
-            // for (int x = 0; x < inputImage.GetLength(0); x++)
-            // for (int y = 0; y < inputImage.GetLength(1); y++)
-            // {
-            //     if (inputImage[x,y] > 0) 
-            //     {    
-            //         for (float theta = 0; theta < 360; theta += thetaStepSize)
-            //         {
-            //             float rF = (x - offsetX) * MathF.Cos(theta / 180.0f * MathF.PI) + (y - offsetY) * MathF.Sin(theta / 180.0f * MathF.PI);
-            //             int r = (int)MathF.Round(rF * rLoD) / rLoD;
-            //             if (isBinary) accumArr[(int)theta, r + maxR]++;
-            //             else accumArr[(int)theta, r + maxR] += accumArr[x, y];
-            //         }
-            //     }        
-            // }
-
             Parallel.For(0, inputImage.GetLength(0), (x) => {
             Parallel.For(0, inputImage.GetLength(1), (y) =>
             {
@@ -1241,6 +1271,40 @@ namespace ImageApp
 
             return (output, lines);
         }
+
+        private byte[,,] BinaryPipeline(byte[,] inputImage, byte t_mag, byte t_peak, int minThresh, int minSegLen, int maxGap)
+        {
+            // make edgemap
+            byte[,] temp = ConvolveImage(inputImage, CreateGaussianFilter(5, 1.0f));
+            temp = EdgeMagnitude(temp, PrewittHorizontal, PrewittVertical);
+            temp = ThresholdImage(temp, t_mag);
+
+            // hough transform and line segments
+            // byte[,] accArr = HoughTransform(temp);
+            // List<(int, int)> peaks = PeakFinding(accArr, t_peak);
+            // (byte[,,] output, List<((int, int),(int, int))> lines) = HoughLineSegments(temp, peaks, minThresh, minSegLen, maxGap);
+
+
+            return null; // REMOVE THIS AND UNCOMMENT ABOVE 3 LINES AND RETURN BELOW
+            // return output;
+        }
+
+        private byte[,,] GrayscalePipeline(byte[,] inputImage, byte t_peak, int minThresh, int minSegLen, int maxGap)
+        {
+            // make edgemap
+            byte[,] temp = ConvolveImage(inputImage, CreateGaussianFilter(5, 1.0f));
+            temp = EdgeMagnitude(temp, PrewittHorizontal, PrewittVertical);
+
+            // hough transform and line segments
+            // byte[,] accArr = HoughTransform(temp);
+            // List<(int, int)> peaks = PeakFinding(accArr, t_peak);
+            // (byte[,,] output, List<((int, int),(int, int))> lines) = HoughLineSegments(temp, peaks, minThresh, minSegLen, maxGap);
+
+
+            return null; // REMOVE THIS AND UNCOMMENT ABOVE 3 LINES AND RETURN BELOW
+            // return output;
+        }        
+
                     
         // ====================================================================
         // ==================== IMAGE <-> BITMAP HELPERS (given) =============

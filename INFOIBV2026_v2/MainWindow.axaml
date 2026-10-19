@@ -74,6 +74,26 @@
 
     </StackPanel>
 
+      <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" Margin="0,0,0,4">
+      <!-- Add custom parameter controls here -->
+
+      <TextBlock Text="t_mag:" VerticalAlignment="Center"/>
+      <TextBox x:Name="ThreshMagBox" Width="50" Text="128"/>
+
+      <TextBlock Text="t_peak:" VerticalAlignment="Center"/>
+      <TextBox x:Name="ThreshPeakBox" Width="50" Text="128"/>
+
+      <TextBlock Text="Minimum Intensity:" VerticalAlignment="Center"/>
+      <TextBox x:Name="MinThreshBox" Width="50" Text="128"/>
+
+      <TextBlock Text="Minimum Segment Length:" VerticalAlignment="Center"/>
+      <TextBox x:Name="MinSegLenBox" Width="50" Text="5"/>
+
+      <TextBlock Text="Maximum Gap:" VerticalAlignment="Center"/>
+      <TextBox x:Name="MaxGapBox" Width="50" Text="5"/>
+
+    </StackPanel>
+
     <TextBlock Grid.Row="3" x:Name="StatusText" Text="" TextWrapping="Wrap" Margin="0,4,0,0"/>
 
   </Grid>
