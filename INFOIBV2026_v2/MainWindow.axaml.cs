@@ -366,7 +366,7 @@ namespace ImageApp
 
                         case ProcessingFunctions.HoughTransform:
                         {
-                            result = HoughTransform(gray);
+                            result = AdjustContrast(HoughTransform(gray));
                             break;
                         }
 
@@ -1200,7 +1200,7 @@ namespace ImageApp
             });
             });
 
-            return AdjustContrast(accumArr);
+            return accumArr;
         }
 
         private (byte[,,], List<((int, int), (int, int))>) HoughLineSegments(byte[,] inputImage, List<(int, int)> peaks, int minThresh, int minSegLen, int maxGap)
