@@ -399,7 +399,8 @@ namespace ImageApp
 
                         case ProcessingFunctions.HoughTransform:
                         {
-                            result = AdjustContrast(HoughTransform(gray));
+                            byte[,] temp = HoughTransform(gray);
+                            result = AdjustContrast(temp);
                             break;
                         }
 
@@ -433,7 +434,7 @@ namespace ImageApp
                     var bmp = result switch 
                     {
                         byte[,,] colorImg => ColorArrayToBitmap(colorImg),
-                        byte[,] grayImg => ByteArrayToBitmap(gray),
+                        byte[,] grayImg => ByteArrayToBitmap(grayImg),
                         _ => throw new NotSupportedException()
                     };
                     return (gray, bmp);
@@ -1205,11 +1206,16 @@ namespace ImageApp
         {
             int thetaStepSize = 1;
             int rLoD = 1;
-
-            bool isBinary = true;
             
             int offsetX = inputImage.GetLength(0)/2;
             int offsetY = inputImage.GetLength(1)/2;
+
+            bool isBinary = true;
+            for (int x = 0; x < inputImage.GetLength(0); x++)
+            for (int y = 0; y < inputImage.GetLength(1); y++)
+            {
+                if (inputImage[x, y] != 0 && inputImage[x, y] != 255) { isBinary = false; break; }          
+            }
 
             int maxR = (inputImage.GetLength(0) - 1 - offsetX + inputImage.GetLength(1) - 1 - offsetY);
             byte[,] accumArr = new byte[360/thetaStepSize, 2*maxR];
