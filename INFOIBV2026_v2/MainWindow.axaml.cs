@@ -1255,8 +1255,9 @@ namespace ImageApp
             });
 
             List<((int, int), (int, int))> lines = new List<((int, int), (int, int))>();
+            List<LineSegment> segments = new List<LineSegment>();
 
-            Parallel.ForEach(peaks, pair => {
+            foreach ((int, int) pair in peaks) {
                 int theta = pair.Item1;
                 List<(int, int)> maybeOnLine = new List<(int, int)>();
 
@@ -1266,17 +1267,47 @@ namespace ImageApp
                     int y = (int)Math.Floor(pair.Item2 - x*MathF.Cos(theta) / x*MathF.Sin(theta));
                     if (inputImage[x, y] > minThresh) maybeOnLine.Add((x, y));
                 }
+                
+                LineSegment segment = new LineSegment();
+                segment.startCoord = maybeOnLine[0];
+                segment.endCoord = maybeOnLine[maybeOnLine.Count - 1];
+                segment.points = maybeOnLine;
+            };
+
+            int i = 0;
+            while (i < segments.Count) 
+            {
+                if (i != 0)
+                if (dist(segments[i].startCoord, segments[i-1].endCoord) <= minSegLen)
+                {
+                    LineSegment prev = segments[i-1];
+                    prev.endCoord = segments[i].endCoord;
+                    prev.points.AddRange(segments[i].points);
+                    segments.RemoveAt(i); 
+                }
 
                 // check len and add lines to output image
-                if (maybeOnLine.Count >= minSegLen)
+                if (segments[i].points.Count >= minSegLen)
                 {
-                    lines.Add((maybeOnLine[0], maybeOnLine[maybeOnLine.Count-1]));
-                    foreach ((int, int) point in maybeOnLine) output[point.Item1, point.Item2, 0] = 255;
+                    lines.Add((segments[i].points[0], segments[i].points[segments[i].points.Count-1]));
+                    foreach ((int, int) point in segments[i].points) output[point.Item1, point.Item2, 0] = 255;
                 }
-            });
+            }
 
             return (output, lines);
+
+            float dist((int, int) p1, (int, int) p2)
+            {
+                return MathF.Sqrt(MathF.Pow(p2.Item1 - p1.Item1, 2) + MathF.Pow(p2.Item2 - p1.Item2, 2));
+            }
         }
+
+        struct LineSegment
+        {
+             public (int, int) startCoord;
+             public (int, int) endCoord;
+             public List<(int, int)> points; 
+        };
 
         private byte[,,] BinaryPipeline(byte[,] inputImage, byte t_mag, byte t_peak, int minThresh, int minSegLen, int maxGap)
         {
