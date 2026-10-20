@@ -72,6 +72,9 @@
       <TextBlock Text="StructElem size:" VerticalAlignment="Center"/>
       <TextBox x:Name="StructElemSizeBox" Width="50" Text="5"/>
 
+      <TextBlock Text="Peak Threshold:" VerticalAlignment="Center"/>
+      <TextBox x:Name="TPeakBox" Width="50" Text="150"/>
+
     </StackPanel>
 
       <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="10" Margin="0,0,0,4">

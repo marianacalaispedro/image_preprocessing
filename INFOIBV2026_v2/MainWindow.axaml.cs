@@ -52,9 +52,11 @@ namespace ImageApp
             HistogramEqualization,
             SequentialRegionLabeling,
             HoughTransform,
+            HoughPeakFinding,
             HoughLineSegments,
             BinaryPipeline,
             GrayscalePipeline,
+            FloodFill,
         }
 
         public MainWindow()
@@ -234,7 +236,13 @@ namespace ImageApp
                 return;
             }
 
-            if (!byte.TryParse(StructElemSizeBox.Text, out byte t_mag))
+            if (!int.TryParse(TPeakBox.Text, out int tPeak) || tPeak < 0 && tPeak > 256)
+            {
+                StatusText.Text = "Peak threshold must be a non-negative integer.";
+                return;
+            }
+
+                       if (!byte.TryParse(StructElemSizeBox.Text, out byte t_mag))
             {
                 StatusText.Text = "t_mag must be an integer between 0-255.";
                 return;
@@ -263,6 +271,7 @@ namespace ImageApp
                 StatusText.Text = "t_mag must be an integer.";
                 return;
             }
+
 
             ApplyButton.IsEnabled = false;
             StatusText.Text = "Processing...";
@@ -403,6 +412,10 @@ namespace ImageApp
                             result = AdjustContrast(temp);
                             break;
                         }
+                        
+                        case ProcessingFunctions.HoughPeakFinding:
+                            gray = HoughPeakFinding(HoughTransform(gray), tPeak);
+                            break;
 
                         case ProcessingFunctions.HoughLineSegments:
                         {
@@ -426,6 +439,10 @@ namespace ImageApp
                             result = GrayscalePipeline(gray, t_peak, minThresh, minSegLen, maxGap);
                             break; 
                         }
+
+                        case ProcessingFunctions.FloodFill:
+                            gray = FloodFill(gray);
+                            break;
                         
                         default:
                             throw new NotSupportedException($"Operation '{selected}' is not implemented in the OnApply switch.");
@@ -1108,7 +1125,6 @@ namespace ImageApp
         private byte[,] SequentialRegionLabeling(byte[,] inputImage)
         {
             const byte pForeground = 255; 
-            const int pBackground = 0;
 
             int w = inputImage.GetLength(0);
             int h = inputImage.GetLength(1);
@@ -1236,7 +1252,44 @@ namespace ImageApp
             });
             });
 
-            return accumArr;
+            return AdjustContrast(accumArr);
+        }
+
+        private byte[,] HoughPeakFinding(byte[,] accumArr, int tPeak)
+        {
+            int w = accumArr.GetLength(0);
+            int h = accumArr.GetLength(1);
+            
+            byte[,] accumArrMax = new byte[w, h];
+            // Using option B from the slides (Non-maximum suppression)
+            for (int xaccumArr = 0; xaccumArr < w; xaccumArr ++)
+            for (int yaccumArr = 0; yaccumArr < h; yaccumArr++)
+            {    
+                bool centerIsMax = true;
+                for (int nx = xaccumArr - 1; nx <= xaccumArr + 1 && centerIsMax; nx++)
+                for (int ny = yaccumArr - 1; ny <= yaccumArr + 1 && centerIsMax; ny++)
+                {
+                    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                    if (nx == xaccumArr && ny == yaccumArr) continue;
+                    if (accumArr[xaccumArr, yaccumArr] < accumArr[nx, ny])
+                        centerIsMax = false;
+                }
+                
+                if (centerIsMax) { accumArrMax[xaccumArr, yaccumArr] = accumArr[xaccumArr, yaccumArr];}
+                else { accumArrMax[xaccumArr, yaccumArr] = 0;}
+            }
+            
+            for (int xaccumArr = 0; xaccumArr < w; xaccumArr ++)
+            for (int yaccumArr = 0; yaccumArr < h; yaccumArr++)
+            {
+                if(accumArrMax[xaccumArr, yaccumArr] < tPeak)
+                {
+                    accumArrMax[xaccumArr, yaccumArr] = 0;
+                }
+            }
+            
+            return accumArrMax;
+
         }
 
         private (byte[,,], List<((int, int), (int, int))>) HoughLineSegments(byte[,] inputImage, List<(int, int)> peaks, int minThresh, int minSegLen, int maxGap)
@@ -1342,7 +1395,59 @@ namespace ImageApp
             // return output;
         }        
 
-                    
+
+        private byte[,] FloodFill(byte[,] inputImage)
+        {
+            int w = inputImage.GetLength(0);
+            int h = inputImage.GetLength(1);
+            const byte foreground = 255;
+
+            byte[,] labels = new byte[w, h];
+            byte nextLabel = 1;
+
+            for (int x = 0; x < w; x++)
+            for (int y = 0; y < h; y++)
+            {
+                if (inputImage[x, y] != foreground || labels[x, y] != 0)
+                    continue;
+
+                var queue = new Queue<(int x, int y)>();
+                queue.Enqueue((x, y));
+                labels[x, y] = nextLabel;
+
+                while (queue.Count > 0)
+                {
+                    var (cx, cy) = queue.Dequeue();
+
+                    for (int dx = -1; dx <= 1; dx++)
+                    for (int dy = -1; dy <= 1; dy++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+
+                        int nx = cx + dx;
+                        int ny = cy + dy;
+
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                        if (inputImage[nx, ny] != foreground) continue;
+                        if (labels[nx, ny] != 0) continue;
+
+                        labels[nx, ny] = nextLabel;
+                        queue.Enqueue((nx, ny));
+                    }
+                }
+
+                nextLabel++;
+
+                if (nextLabel == 0)
+                throw new InvalidOperationException(
+                    "More than 253 regions found: assignment assumption violated. " +
+                    "FloodFill expects an image with fewer than 254 regions!");
+            }
+
+            return AdjustContrast(labels);
+        }
+
+
         // ====================================================================
         // ==================== IMAGE <-> BITMAP HELPERS (given) =============
         // ====================================================================
