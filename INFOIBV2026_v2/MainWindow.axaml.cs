@@ -236,37 +236,31 @@ namespace ImageApp
                 return;
             }
 
-            if (!int.TryParse(ThreshPeakBox.Text, out int tPeak) || tPeak < 0 && tPeak > 256)
-            {
-                StatusText.Text = "Peak threshold must be a non-negative integer.";
-                return;
-            }
-
-                       if (!byte.TryParse(StructElemSizeBox.Text, out byte t_mag))
+            if (!byte.TryParse(ThreshMagBox.Text, out byte t_mag))
             {
                 StatusText.Text = "t_mag must be an integer between 0-255.";
                 return;
             }
 
-            if (!byte.TryParse(StructElemSizeBox.Text, out byte t_peak))
+            if (!byte.TryParse(ThreshPeakBox.Text, out byte t_peak))
             {
                 StatusText.Text = "t_peak must be an integer between 0-255.";
                 return;
             }
 
-            if (!byte.TryParse(StructElemSizeBox.Text, out byte minThresh))
+            if (!byte.TryParse(MinThreshBox.Text, out byte minThresh))
             {
                 StatusText.Text = "Minimum intensity must be an integer between 0-255.";
                 return;
             }
 
-            if (!byte.TryParse(StructElemSizeBox.Text, out byte minSegLen))
+            if (!byte.TryParse(MinSegLenBox.Text, out byte minSegLen))
             {
                 StatusText.Text = "t_mag must be an integer.";
                 return;
             }
 
-            if (!byte.TryParse(StructElemSizeBox.Text, out byte maxGap))
+            if (!byte.TryParse(MaxGapBox.Text, out byte maxGap))
             {
                 StatusText.Text = "t_mag must be an integer.";
                 return;
@@ -415,7 +409,7 @@ namespace ImageApp
                         }
                         
                         case ProcessingFunctions.HoughPeakFinding:
-                            var (peaks, viz) = HoughPeakFinding(HoughTransform(gray), tPeak);
+                            var (peaks, viz) = HoughPeakFinding(HoughTransform(gray), t_peak);
                             result = viz;
                             break;
 
@@ -1335,7 +1329,7 @@ namespace ImageApp
                 List<(int, int)> maybeOnLine = new List<(int, int)>();
 
                 // get 'on' pixels
-                if (MathF.Abs(sinT) > 0.001f)
+                if (MathF.Abs(sinT) > 0.001f) // crashs' when we try to do sin of 90 or 180 (cause div by 0 is impossible :,))
                     for (int x = 0; x < inputImage.GetLength(0); x++)
                     {
                         int y = ((int)Math.Floor((r - (x - inputImage.GetLength(0)/2)*cosT) / sinT)) + inputImage.GetLength(1)/2;
@@ -1348,7 +1342,7 @@ namespace ImageApp
                     }
                 else
                 {
-                    // for the strict vertical lines 
+                    // for the strict vertical lines (otherwise it )
                     int x = (int)Math.Floor(r / cosT) + offsetX;
                     
                     if (x >= 0 && x < inputImage.GetLength(0))
@@ -1428,8 +1422,6 @@ namespace ImageApp
             var (peaks, _) = HoughPeakFinding(accArr, t_peak);
             (byte[,,] output, List<((int, int),(int, int))> lines) = HoughLineSegments(temp, peaks, minThresh, minSegLen, maxGap);
 
-
-            //return null; // REMOVE THIS AND UNCOMMENT ABOVE 3 LINES AND RETURN BELOW
             return output;
         }
 
@@ -1440,13 +1432,11 @@ namespace ImageApp
             temp = EdgeMagnitude(temp, PrewittHorizontal, PrewittVertical);
 
             // hough transform and line segments
-            // byte[,] accArr = HoughTransform(temp);
-            // List<(int, int)> peaks = PeakFinding(accArr, t_peak);
-            // (byte[,,] output, List<((int, int),(int, int))> lines) = HoughLineSegments(temp, peaks, minThresh, minSegLen, maxGap);
+            byte[,] accArr = HoughTransform(temp);
+            var (peaks, _) = HoughPeakFinding(accArr, t_peak);
+            (byte[,,] output, List<((int, int),(int, int))> lines) = HoughLineSegments(temp, peaks, minThresh, minSegLen, maxGap);
 
-
-            return null; // REMOVE THIS AND UNCOMMENT ABOVE 3 LINES AND RETURN BELOW
-            // return output;
+            return output;
         }        
 
 
