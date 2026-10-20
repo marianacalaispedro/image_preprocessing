@@ -1223,7 +1223,7 @@ namespace ImageApp
         private byte[,] HoughTransform(byte[,] inputImage)
         {
             int thetaStepSize = 1;
-            int rLoD = 2;
+            int rLoD = 1;
             
             int offsetX = inputImage.GetLength(0)/2;
             int offsetY = inputImage.GetLength(1)/2;
@@ -1363,10 +1363,12 @@ namespace ImageApp
                 
                 if (maybeOnLine.Count > 0)
                 {
-                    LineSegment segment = new LineSegment();
-                    segment.startCoord = maybeOnLine[0];
-                    segment.endCoord = maybeOnLine[maybeOnLine.Count - 1];
-                    segment.points = maybeOnLine;
+                    LineSegment segment = new LineSegment
+                    {
+                        startCoord = maybeOnLine[0],
+                        endCoord = maybeOnLine[maybeOnLine.Count - 1],
+                        points = maybeOnLine
+                    };
                     segments.Add(segment);
                     }
             };

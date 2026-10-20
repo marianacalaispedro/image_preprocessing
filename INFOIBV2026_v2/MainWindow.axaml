@@ -78,16 +78,16 @@
       <!-- Add custom parameter controls here -->
 
       <TextBlock Text="t_mag:" VerticalAlignment="Center"/>
-      <TextBox x:Name="ThreshMagBox" Width="50" Text="128"/>
+      <TextBox x:Name="ThreshMagBox" Width="50" Text="50"/>
 
       <TextBlock Text="t_peak:" VerticalAlignment="Center"/>
-      <TextBox x:Name="ThreshPeakBox" Width="50" Text="128"/>
+      <TextBox x:Name="ThreshPeakBox" Width="50" Text="100"/>
 
       <TextBlock Text="Minimum Intensity:" VerticalAlignment="Center"/>
-      <TextBox x:Name="MinThreshBox" Width="50" Text="128"/>
+      <TextBox x:Name="MinThreshBox" Width="50" Text="50"/>
 
       <TextBlock Text="Minimum Segment Length:" VerticalAlignment="Center"/>
-      <TextBox x:Name="MinSegLenBox" Width="50" Text="5"/>
+      <TextBox x:Name="MinSegLenBox" Width="50" Text="20"/>
 
       <TextBlock Text="Maximum Gap:" VerticalAlignment="Center"/>
       <TextBox x:Name="MaxGapBox" Width="50" Text="5"/>
