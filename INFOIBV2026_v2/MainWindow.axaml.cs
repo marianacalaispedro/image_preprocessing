@@ -1136,6 +1136,7 @@ namespace ImageApp
 
                 var possibleLabels = new List<int>();
 
+                // check neighbors
                 for (int xn = x - 1; xn <= x + 1; xn++)
                 for (int yn = y - 1; yn <= y + 1; yn++)
                 {
@@ -1219,9 +1220,11 @@ namespace ImageApp
             int thetaStepSize = 1;
             int rLoD = 1;
             
+            // center coordinates
             int offsetX = inputImage.GetLength(0)/2;
             int offsetY = inputImage.GetLength(1)/2;
 
+            // check if the image is binary
             bool isBinary = true;
             for (int x = 0; x < inputImage.GetLength(0); x++)
             for (int y = 0; y < inputImage.GetLength(1); y++)
@@ -1240,10 +1243,9 @@ namespace ImageApp
                     for (float theta = 0; theta < 360/thetaStepSize; theta += thetaStepSize)
                     {
                         float rF = ((x - offsetX) * MathF.Cos(theta / 180.0f * MathF.PI)) + ((y - offsetY) * MathF.Sin(theta / 180.0f * MathF.PI));
-                        int r = (int)MathF.Round(rF * rLoD) / rLoD;
-                        // accumArr[(int)theta, r + maxR]++;
+                        int r = (int)MathF.Round(rF * rLoD) / rLoD;  // round to level of detail of r
+                        
                         if (isBinary) Interlocked.Increment(ref accumArr[(int)theta, r + maxR]);
-                        // accumArr[(int)theta, r + maxR] += inputImage[x, y];
                         else Interlocked.Add(ref accumArr[(int)theta, r + maxR], inputImage[x, y]);
                     }
                 }        
@@ -1326,7 +1328,6 @@ namespace ImageApp
             });
 
             List<((int, int), (int, int))> lines = new List<((int, int), (int, int))>();
-            List<LineSegment> segments = new List<LineSegment>();
 
             foreach ((int, int) pair in peaks) {
                 int theta = pair.Item2;
@@ -1341,7 +1342,7 @@ namespace ImageApp
                 List<(int x, int y, bool on)> following = new List<(int x, int y, bool on)>();
 
                 // get 'on' pixels
-                if (MathF.Abs(sinT) >= MathF.Abs(cosT)) // crashs' when we try to do sin of 90 or 180 (cause div by 0 is impossible :,))
+                if (MathF.Abs(sinT) >= MathF.Abs(cosT)) // crashes when we try to do sin of 90 or 180 (cause div by 0 is impossible :,))
                 {
                     for (int ix = 0; ix < inputImage.GetLength(0); ix++)
                     {
@@ -1349,7 +1350,6 @@ namespace ImageApp
                         if (iy >= 0 && iy < inputImage.GetLength(1))
                         {
                             following.Add((ix, iy, inputImage[ix, iy] > minThresh));
-                            //if (inputImage[x, y] > minThresh) maybeOnLine.Add((x, y));
                         }
                     }
                 }
@@ -1392,6 +1392,7 @@ namespace ImageApp
 
             return (output, lines);
 
+            // add segment to end list (if it longer than minSegLen) and draw on original edgemap
             void FinishSegment(List<(int, int)> pts)
             {
                 if (pts.Count == 0 || pts.Count < minSegLen) return;
@@ -1410,14 +1411,6 @@ namespace ImageApp
                 return MathF.Sqrt(MathF.Pow(p2.Item2 - p1.Item2, 2) + MathF.Pow(p2.Item1 - p1.Item1, 2));
             }
         }
-
-
-        struct LineSegment
-        {
-             public (int, int) startCoord;
-             public (int, int) endCoord;
-             public List<(int, int)> points; 
-        };
 
         private byte[,,] BinaryPipeline(byte[,] inputImage, byte t_mag, int t_peak, int minThresh, int minSegLen, int maxGap)
         {
@@ -1464,6 +1457,7 @@ namespace ImageApp
                 if (inputImage[x, y] != foreground || labels[x, y] != 0)
                     continue;
 
+                // breadth-first search
                 var queue = new Queue<(int x, int y)>();
                 queue.Enqueue((x, y));
                 labels[x, y] = nextLabel;
@@ -1472,17 +1466,20 @@ namespace ImageApp
                 {
                     var (cx, cy) = queue.Dequeue();
 
+                    // check for neighbours
                     for (int dx = -1; dx <= 1; dx++)
                     for (int dy = -1; dy <= 1; dy++)
                     {
+
+                        // disregard center
                         if (dx == 0 && dy == 0) continue;
 
                         int nx = cx + dx;
                         int ny = cy + dy;
 
-                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                        if (inputImage[nx, ny] != foreground) continue;
-                        if (labels[nx, ny] != 0) continue;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;   // disregard out of bounds
+                        if (inputImage[nx, ny] != foreground) continue;         // disregard background pixel
+                        if (labels[nx, ny] != 0) continue;                      // disregard labeled pixel
 
                         labels[nx, ny] = nextLabel;
                         queue.Enqueue((nx, ny));
