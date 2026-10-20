@@ -1229,7 +1229,7 @@ namespace ImageApp
                 if (inputImage[x, y] != 0 && inputImage[x, y] != 255) { isBinary = false; break; }          
             }
 
-            int maxR = inputImage.GetLength(0) - 1 - offsetX + inputImage.GetLength(1) - 1 - offsetY;
+            int maxR = (int)MathF.Ceiling(MathF.Sqrt(offsetX*offsetX + offsetY*offsetY)) + 1;
             byte[,] accumArr = new byte[360/thetaStepSize, 2*maxR];
 
             Parallel.For(0, inputImage.GetLength(0), (x) => {
