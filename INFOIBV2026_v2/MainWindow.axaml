@@ -87,10 +87,10 @@
       <TextBox x:Name="MinThreshBox" Width="50" Text="50"/>
 
       <TextBlock Text="Minimum Segment Length:" VerticalAlignment="Center"/>
-      <TextBox x:Name="MinSegLenBox" Width="50" Text="20"/>
+      <TextBox x:Name="MinSegLenBox" Width="150" Text="20"/>
 
       <TextBlock Text="Maximum Gap:" VerticalAlignment="Center"/>
-      <TextBox x:Name="MaxGapBox" Width="50" Text="5"/>
+      <TextBox x:Name="MaxGapBox" Width="3" Text="5"/>
 
     </StackPanel>
 

@@ -242,7 +242,7 @@ namespace ImageApp
                 return;
             }
 
-            if (!byte.TryParse(ThreshPeakBox.Text, out byte t_peak))
+            if (!int.TryParse(ThreshPeakBox.Text, out int t_peak))
             {
                 StatusText.Text = "t_peak must be an integer between 0-255.";
                 return;
@@ -402,24 +402,24 @@ namespace ImageApp
 
                         case ProcessingFunctions.HoughTransform:
                         {
-                            byte[,] temp = HoughTransform(gray);
+                            byte[,] temp = AccumulatorToByte(HoughTransform(gray));
                             //result = AdjustContrast(temp);
                             result = temp;
                             break;
                         }
                         
                         case ProcessingFunctions.HoughPeakFinding:
-                            var (peaks, viz) = HoughPeakFinding(HoughTransform(gray), t_peak);
+                            var (peaks, viz) = HoughPeakFinding(HoughTransform(gray),  t_peak);
                             result = viz;
                             break;
 
                         case ProcessingFunctions.HoughLineSegments:
                         {
-                            List<(int, int)> listOfPeaks = [(50, 50), (0, 0), (20, 20)];
+                            var (peaks2, viz2) = HoughPeakFinding(HoughTransform(gray), 60);
                             int minIntensityThreshold = 50;
                             int minSegmentLength = 0;
                             int maxGapParameter = 0;
-                            (byte[,,] output, List<((int, int), (int, int))> lines) = HoughLineSegments(gray, listOfPeaks, minIntensityThreshold, minSegmentLength, maxGapParameter);
+                            (byte[,,] output, List<((int, int), (int, int))> lines) = HoughLineSegments(gray, peaks2, minIntensityThreshold, minSegmentLength, maxGapParameter);
                             result = output;
                             break;  
                         }
@@ -1136,6 +1136,7 @@ namespace ImageApp
 
                 var possibleLabels = new List<int>();
 
+                // check neighbors
                 for (int xn = x - 1; xn <= x + 1; xn++)
                 for (int yn = y - 1; yn <= y + 1; yn++)
                 {
@@ -1214,14 +1215,16 @@ namespace ImageApp
             return AdjustContrast(labelImage);
         }
 
-        private byte[,] HoughTransform(byte[,] inputImage)
+        private int[,] HoughTransform(byte[,] inputImage)
         {
             int thetaStepSize = 1;
             int rLoD = 1;
             
+            // center coordinates
             int offsetX = inputImage.GetLength(0)/2;
             int offsetY = inputImage.GetLength(1)/2;
 
+            // check if the image is binary
             bool isBinary = true;
             for (int x = 0; x < inputImage.GetLength(0); x++)
             for (int y = 0; y < inputImage.GetLength(1); y++)
@@ -1230,7 +1233,7 @@ namespace ImageApp
             }
 
             int maxR = (int)MathF.Ceiling(MathF.Sqrt(offsetX*offsetX + offsetY*offsetY)) + 1;
-            byte[,] accumArr = new byte[360/thetaStepSize, 2*maxR];
+            int[,] accumArr = new int[360/thetaStepSize, 2*maxR];
 
             Parallel.For(0, inputImage.GetLength(0), (x) => {
             Parallel.For(0, inputImage.GetLength(1), (y) =>
@@ -1240,9 +1243,10 @@ namespace ImageApp
                     for (float theta = 0; theta < 360/thetaStepSize; theta += thetaStepSize)
                     {
                         float rF = ((x - offsetX) * MathF.Cos(theta / 180.0f * MathF.PI)) + ((y - offsetY) * MathF.Sin(theta / 180.0f * MathF.PI));
-                        int r = (int)MathF.Round(rF * rLoD) / rLoD;
-                        if (isBinary) accumArr[(int)theta, r + maxR]++;
-                        else accumArr[(int)theta, r + maxR] += inputImage[x, y];
+                        int r = (int)MathF.Round(rF * rLoD) / rLoD;  // round to level of detail of r
+                        
+                        if (isBinary) Interlocked.Increment(ref accumArr[(int)theta, r + maxR]);
+                        else Interlocked.Add(ref accumArr[(int)theta, r + maxR], inputImage[x, y]);
                     }
                 }        
             });
@@ -1251,12 +1255,23 @@ namespace ImageApp
             return accumArr;
         }
 
-        private (List<(int r ,int theta)> peaks, byte[,] Visualization) HoughPeakFinding(byte[,] accumArr, int tPeak)
+        private byte[,] AccumulatorToByte(int[,] acc)
+        {
+            int max = 1;
+            foreach (int v in acc) if (v > max) max = v;
+            byte[,] o = new byte[acc.GetLength(0), acc.GetLength(1)];
+            for (int i = 0; i < acc.GetLength(0); i++)
+            for (int j = 0; j < acc.GetLength(1); j++)
+                o[i, j] = (byte)(acc[i, j] * 255L / max);
+            return o;
+        }
+
+        private (List<(int r ,int theta)> peaks, byte[,] Visualization) HoughPeakFinding(int[,] accumArr, int tPeak)
         {
             int w = accumArr.GetLength(0);
             int h = accumArr.GetLength(1);
             
-            byte[,] accumArrMax = new byte[w, h];
+            int[,] accumArrMax = new int[w, h];
 
             // Using option B from the slides (Non-maximum suppression)
             for (int xaccumArr = 0; xaccumArr < w; xaccumArr ++)
@@ -1290,7 +1305,7 @@ namespace ImageApp
                 }
             }
             
-            return (peaks, accumArrMax);
+            return (peaks, AccumulatorToByte(accumArrMax));
         }
 
         private (byte[,,], List<((int, int), (int, int))>) HoughLineSegments(byte[,] inputImage, List<(int, int)> peaks, int minThresh, int minSegLen, int maxGap)
@@ -1299,7 +1314,6 @@ namespace ImageApp
 
             int offsetX = inputImage.GetLength(0)/2;
             int offsetY = inputImage.GetLength(1)/2;
-
             int maxR = inputImage.GetLength(0) - 1 - offsetX + inputImage.GetLength(1) - 1 - offsetY;
             
             // make inputImage a color image
@@ -1314,7 +1328,6 @@ namespace ImageApp
             });
 
             List<((int, int), (int, int))> lines = new List<((int, int), (int, int))>();
-            List<LineSegment> segments = new List<LineSegment>();
 
             foreach ((int, int) pair in peaks) {
                 int theta = pair.Item2;
@@ -1326,76 +1339,72 @@ namespace ImageApp
                 float cosT = MathF.Cos(thetaRad);
                 float sinT = MathF.Sin(thetaRad);
 
-                List<(int, int)> maybeOnLine = new List<(int, int)>();
+                List<(int x, int y, bool on)> following = new List<(int x, int y, bool on)>();
 
                 // get 'on' pixels
-                if (MathF.Abs(sinT) > 0.001f) // crashs' when we try to do sin of 90 or 180 (cause div by 0 is impossible :,))
-                    for (int x = 0; x < inputImage.GetLength(0); x++)
+                if (MathF.Abs(sinT) >= MathF.Abs(cosT)) // crashes when we try to do sin of 90 or 180 (cause div by 0 is impossible :,))
+                {
+                    for (int ix = 0; ix < inputImage.GetLength(0); ix++)
                     {
-                        int y = ((int)Math.Floor((r - (x - inputImage.GetLength(0)/2)*cosT) / sinT)) + inputImage.GetLength(1)/2;
-                        
-                        if (y >= 0 && y < inputImage.GetLength(1))
+                        int iy = ((int)Math.Round((r - (ix - offsetX) * cosT) / sinT)) + offsetY;
+                        if (iy >= 0 && iy < inputImage.GetLength(1))
                         {
-                            if (inputImage[x, y] > minThresh) maybeOnLine.Add((x, y));
+                            following.Add((ix, iy, inputImage[ix, iy] > minThresh));
                         }
-        
                     }
+                }
                 else
                 {
                     // for the strict vertical lines (otherwise it )
-                    int x = (int)Math.Floor(r / cosT) + offsetX;
-                    
-                    if (x >= 0 && x < inputImage.GetLength(0))
+                    for (int iy = 0; iy < inputImage.GetLength(1); iy++)
                     {
-                        for (int y = 0; y < inputImage.GetLength(1); y++)
-                        {
-                            if (inputImage[x, y] > minThresh) maybeOnLine.Add((x, y));
+                        int ix = (int)MathF.Round((r - (iy - offsetY) * sinT) / cosT) + offsetX;
+                        if (ix >= 0 && ix < inputImage.GetLength(0))
+                        { 
+                            following.Add((ix, iy, inputImage[ix, iy] > minThresh));
                         }
                     }
+                }
 
-                }
-                
-                if (maybeOnLine.Count > 0)
-                {
-                    LineSegment segment = new LineSegment
-                    {
-                        startCoord = maybeOnLine[0],
-                        endCoord = maybeOnLine[maybeOnLine.Count - 1],
-                        points = maybeOnLine
-                    };
-                    segments.Add(segment);
-                    }
-            };
+                List<(int, int)> current = new List<(int, int)>();
+                int gap = 0;
 
-            int i = 0;
-            while (i < segments.Count) 
-            {
-                if (i != 0)
+                foreach (var pixel in following)
                 {
-                    if (dist(segments[i].startCoord, segments[i-1].endCoord) <= maxGap)
+                    if (pixel.on)
                     {
-                        LineSegment prev = segments[i-1];
-                        prev.endCoord = segments[i].endCoord;
-                        prev.points.AddRange(segments[i].points);
-                        segments.RemoveAt(i); 
-                        continue;
+                        current.Add((pixel.x, pixel.y));
+                        gap = 0;
+                    }
+                    else if (current.Count > 0)
+                    {
+                        gap++;
+                        if (gap > maxGap)          // gap too large: the segment ends here
+                        {
+                            FinishSegment(current);
+                            current = new List<(int, int)>();
+                            gap = 0;
+                        }
                     }
                 }
-                // check len and add lines to output image
-                if (segments[i].points.Count >= minSegLen)
-                {
-                    lines.Add((segments[i].points[0], segments[i].points[segments[i].points.Count-1]));
-                    foreach ((int, int) point in segments[i].points)
-                    {
-                        output[point.Item1, point.Item2, 0] = 255;
-                        output[point.Item1, point.Item2, 1] = 0;
-                        output[point.Item1, point.Item2, 2] = 0;
-                    }
-                }
-                i++;
-            }
+                FinishSegment(current);  
+            } 
 
             return (output, lines);
+
+            // add segment to end list (if it longer than minSegLen) and draw on original edgemap
+            void FinishSegment(List<(int, int)> pts)
+            {
+                if (pts.Count == 0 || pts.Count < minSegLen) return;
+
+                lines.Add((pts[0], pts[pts.Count - 1]));
+                foreach ((int, int) point in pts)
+                {
+                    output[point.Item1, point.Item2, 0] = 255;
+                    output[point.Item1, point.Item2, 1] = 0;
+                    output[point.Item1, point.Item2, 2] = 0;
+                }
+            }
 
             float dist((int, int) p1, (int, int) p2)
             {
@@ -1403,14 +1412,7 @@ namespace ImageApp
             }
         }
 
-        struct LineSegment
-        {
-             public (int, int) startCoord;
-             public (int, int) endCoord;
-             public List<(int, int)> points; 
-        };
-
-        private byte[,,] BinaryPipeline(byte[,] inputImage, byte t_mag, byte t_peak, int minThresh, int minSegLen, int maxGap)
+        private byte[,,] BinaryPipeline(byte[,] inputImage, byte t_mag, int t_peak, int minThresh, int minSegLen, int maxGap)
         {
             // make edgemap
             byte[,] temp = ConvolveImage(inputImage, CreateGaussianFilter(5, 1.0f));
@@ -1418,21 +1420,21 @@ namespace ImageApp
             temp = ThresholdImage(temp, t_mag);
 
             // hough transform and line segments
-            byte[,] accArr = HoughTransform(temp);
+            int[,] accArr = HoughTransform(temp);
             var (peaks, _) = HoughPeakFinding(accArr, t_peak);
             (byte[,,] output, List<((int, int),(int, int))> lines) = HoughLineSegments(temp, peaks, minThresh, minSegLen, maxGap);
 
             return output;
         }
 
-        private byte[,,] GrayscalePipeline(byte[,] inputImage, byte t_peak, int minThresh, int minSegLen, int maxGap)
+        private byte[,,] GrayscalePipeline(byte[,] inputImage, int t_peak, int minThresh, int minSegLen, int maxGap)
         {
             // make edgemap
             byte[,] temp = ConvolveImage(inputImage, CreateGaussianFilter(5, 1.0f));
             temp = EdgeMagnitude(temp, PrewittHorizontal, PrewittVertical);
 
             // hough transform and line segments
-            byte[,] accArr = HoughTransform(temp);
+            int[,] accArr = HoughTransform(temp);
             var (peaks, _) = HoughPeakFinding(accArr, t_peak);
             (byte[,,] output, List<((int, int),(int, int))> lines) = HoughLineSegments(temp, peaks, minThresh, minSegLen, maxGap);
 
@@ -1455,6 +1457,7 @@ namespace ImageApp
                 if (inputImage[x, y] != foreground || labels[x, y] != 0)
                     continue;
 
+                // breadth-first search
                 var queue = new Queue<(int x, int y)>();
                 queue.Enqueue((x, y));
                 labels[x, y] = nextLabel;
@@ -1463,17 +1466,20 @@ namespace ImageApp
                 {
                     var (cx, cy) = queue.Dequeue();
 
+                    // check for neighbours
                     for (int dx = -1; dx <= 1; dx++)
                     for (int dy = -1; dy <= 1; dy++)
                     {
+
+                        // disregard center
                         if (dx == 0 && dy == 0) continue;
 
                         int nx = cx + dx;
                         int ny = cy + dy;
 
-                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-                        if (inputImage[nx, ny] != foreground) continue;
-                        if (labels[nx, ny] != 0) continue;
+                        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;   // disregard out of bounds
+                        if (inputImage[nx, ny] != foreground) continue;         // disregard background pixel
+                        if (labels[nx, ny] != 0) continue;                      // disregard labeled pixel
 
                         labels[nx, ny] = nextLabel;
                         queue.Enqueue((nx, ny));
