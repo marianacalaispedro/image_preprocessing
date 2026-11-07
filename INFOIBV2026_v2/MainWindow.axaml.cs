@@ -1511,8 +1511,7 @@ namespace ImageApp
 
             List<LineSet> linesBetweenAngle = findLinesBetweenAngle(lines, 12, 18);
 
-            List<((int, int), (int, int))> perpLines = findPerpendicularLines(linesBetweenAngle, lines);
-            
+            linesBetweenAngle = findPerpendicularLines(linesBetweenAngle, lines);
 
             return inputImage;
         }
@@ -1524,10 +1523,16 @@ namespace ImageApp
             for (int i = 0; i <= lines.Count; i++) 
             for (int j = i+1; j <= lines.Count; j++)
             {
+                // gradients of lines
                 //                                y2                     y1                              x2                     x1
                 float m1 = (float)(lines[i].Item2.Item2 - lines[i].Item1.Item2) / (float)(lines[i].Item2.Item1 - lines[i].Item1.Item1);
                 float m2 = (float)(lines[j].Item2.Item2 - lines[j].Item1.Item2) / (float)(lines[j].Item2.Item1 - lines[j].Item1.Item1); 
 
+                // intercepts of lines
+                float c1 = lines[i].Item1.Item2 - m1 * lines[i].Item1.Item1;
+                float c2 = lines[j].Item1.Item2 - m1 * lines[j].Item1.Item1;
+
+                // angles between lines
                 float theta = MathF.Atan(MathF.Abs((m1-m2)/(1+m1*m2)));   
 
                 if (theta >= minAngle && theta <= maxAngle)
@@ -1538,10 +1543,13 @@ namespace ImageApp
                     ls.l2_p1 = lines[j].Item1;
                     ls.l2_p2 = lines[j].Item2;   
 
-                    ls.m1 = m1;
-                    ls.m2 = m2;
+                    // y coord of intersection point
+                    ls.intsectY = m1 * ((c2 - c1) / (m1 - m2)) + c1;
 
+                    // gradient of the bisector of the two lines
                     ls.bisectorGradient = MathF.Tan((MathF.Atan(m1) + MathF.Atan(m2)) / 2);
+
+                    ls.perpLines = new List<((int, int), (int, int))>();
 
                     output.Add(ls);
                 }    
@@ -1550,24 +1558,24 @@ namespace ImageApp
             return output;
         }
 
-        private List<((int, int), (int, int))> findPerpendicularLines(List<LineSet> lineSets, List<((int, int), (int, int))> lines)
+        private List<LineSet> findPerpendicularLines(List<LineSet> lineSets, List<((int, int), (int, int))> lines)
         {
-            List<((int, int), (int, int))> output = new List<((int, int), (int, int))>();
-
             foreach (LineSet ls in lineSets)
             { 
-                
-
                 foreach (((int, int),(int, int)) line in lines)
                 {
+                    // gradient line   
                     float m = (float)(line.Item2.Item2 - line.Item1.Item2) / (float)(line.Item2.Item1 - line.Item1.Item1);
-                    float theta = MathF.Atan(MathF.Abs((m-ls.bisectorGradient)/(1+m*ls.bisectorGradient))); 
-                
-                    if (theta >= 88.5 || theta <= 91.5) output.Add(line);
+
+                    // angle between bisector and line
+                    float theta = MathF.Atan(MathF.Abs((m-ls.bisectorGradient)/(1+m*ls.bisectorGradient)));                     
+
+                    // check perpendicular with 1.5 degrees of error && lower than intersection point
+                    if ((theta >= 88.5 || theta <= 91.5) && line.Item1.Item2 <= ls.intsectY && line.Item2.Item2 <= ls.intsectY) ls.perpLines.Add(line); 
                 } 
             }
 
-            return output;
+            return lineSets;
         }
 
         struct LineSet()
@@ -1576,9 +1584,10 @@ namespace ImageApp
             public (int, int) l1_p2;
             public (int, int) l2_p1;
             public (int, int) l2_p2;
-            public float m1;
-            public float m2;
             public float bisectorGradient;
+            public float intsectY;
+
+            public List<((int, int), (int, int))> perpLines;
         }
 
         // ====================================================================
