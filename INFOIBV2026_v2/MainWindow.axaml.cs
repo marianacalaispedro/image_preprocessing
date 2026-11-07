@@ -10,6 +10,9 @@ using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using System.IO.Compression;
 using Avalonia.Media;
+using System.ComponentModel.Design.Serialization;
+using System.Xml;
+using Avalonia.Controls.Shapes;
 
 namespace ImageApp
 {
@@ -1497,6 +1500,86 @@ namespace ImageApp
             return AdjustContrast(labels);
         }
 
+        private byte[,] HoughTrafficCone(byte[,] inputImage)
+        {
+            byte[,] temp = ConvolveImage(inputImage, CreateGaussianFilter(5, 1.0f));
+            temp = EdgeMagnitude(temp, PrewittHorizontal, PrewittVertical);
+            temp = ThresholdImage(temp, 55);
+            int[,] accumArr = HoughTransform(temp);
+            var (peaks, _) = HoughPeakFinding(accumArr, 20);
+            var (viz, lines) = HoughLineSegments(temp, peaks, 50, 30, 5);
+
+            List<LineSet> linesBetweenAngle = findLinesBetweenAngle(lines, 12, 18);
+
+            List<((int, int), (int, int))> perpLines = findPerpendicularLines(linesBetweenAngle, lines);
+            
+
+            return inputImage;
+        }
+
+        private List<LineSet> findLinesBetweenAngle(List<((int, int), (int, int))> lines, int minAngle, int maxAngle)
+        {
+            List<LineSet> output = new List<LineSet>();
+
+            for (int i = 0; i <= lines.Count; i++) 
+            for (int j = i+1; j <= lines.Count; j++)
+            {
+                //                                y2                     y1                              x2                     x1
+                float m1 = (float)(lines[i].Item2.Item2 - lines[i].Item1.Item2) / (float)(lines[i].Item2.Item1 - lines[i].Item1.Item1);
+                float m2 = (float)(lines[j].Item2.Item2 - lines[j].Item1.Item2) / (float)(lines[j].Item2.Item1 - lines[j].Item1.Item1); 
+
+                float theta = MathF.Atan(MathF.Abs((m1-m2)/(1+m1*m2)));   
+
+                if (theta >= minAngle && theta <= maxAngle)
+                {
+                    LineSet ls; 
+                    ls.l1_p1 = lines[i].Item1;  
+                    ls.l1_p2 = lines[i].Item2;
+                    ls.l2_p1 = lines[j].Item1;
+                    ls.l2_p2 = lines[j].Item2;   
+
+                    ls.m1 = m1;
+                    ls.m2 = m2;
+
+                    ls.bisectorGradient = MathF.Tan((MathF.Atan(m1) + MathF.Atan(m2)) / 2);
+
+                    output.Add(ls);
+                }    
+            }
+
+            return output;
+        }
+
+        private List<((int, int), (int, int))> findPerpendicularLines(List<LineSet> lineSets, List<((int, int), (int, int))> lines)
+        {
+            List<((int, int), (int, int))> output = new List<((int, int), (int, int))>();
+
+            foreach (LineSet ls in lineSets)
+            { 
+                
+
+                foreach (((int, int),(int, int)) line in lines)
+                {
+                    float m = (float)(line.Item2.Item2 - line.Item1.Item2) / (float)(line.Item2.Item1 - line.Item1.Item1);
+                    float theta = MathF.Atan(MathF.Abs((m-ls.bisectorGradient)/(1+m*ls.bisectorGradient))); 
+                
+                    if (theta >= 88.5 || theta <= 91.5) output.Add(line);
+                } 
+            }
+
+            return output;
+        }
+
+        struct LineSet()
+        {
+            public (int, int) l1_p1;
+            public (int, int) l1_p2;
+            public (int, int) l2_p1;
+            public (int, int) l2_p2;
+            public float m1;
+            public float m2;
+            public float bisectorGradient;
+        }
 
         // ====================================================================
         // ==================== IMAGE <-> BITMAP HELPERS (given) =============
