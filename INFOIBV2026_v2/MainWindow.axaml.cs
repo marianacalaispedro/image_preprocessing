@@ -13,6 +13,9 @@ using Avalonia.Media;
 using Avalonia.Input;
 using System.Xml.Serialization;
 using Avalonia.Layout;
+using System.ComponentModel.Design.Serialization;
+using System.Xml;
+using Avalonia.Controls.Shapes;
 
 namespace ImageApp
 {
@@ -419,11 +422,11 @@ namespace ImageApp
 
                         case ProcessingFunctions.HoughLineSegments:
                         {
-                            List<(int, int)> listOfPeaks = HoughPeakFinding(HoughTransform(gray), t_peak).Item1;
+                            var (peaks2, viz2) = HoughPeakFinding(HoughTransform(gray), 60);
                             int minIntensityThreshold = 50;
                             int minSegmentLength = 0;
                             int maxGapParameter = 0;
-                            (byte[,,] output, List<((int, int), (int, int))> lines) = HoughLineSegments(gray, listOfPeaks, minIntensityThreshold, minSegmentLength, maxGapParameter);
+                            (byte[,,] output, List<((int, int), (int, int))> lines) = HoughLineSegments(gray, peaks2, minIntensityThreshold, minSegmentLength, maxGapParameter);
                             result = output;
                             break;  
                         }
@@ -1240,7 +1243,7 @@ namespace ImageApp
                 if (inputImage[x, y] != 0 && inputImage[x, y] != 255) { isBinary = false; break; }          
             }
 
-            int maxR = inputImage.GetLength(0) - 1 - offsetX + inputImage.GetLength(1) - 1 - offsetY;
+            int maxR = (int)MathF.Ceiling(MathF.Sqrt(offsetX*offsetX + offsetY*offsetY)) + 1;
             int[,] accumArr = new int[360/thetaStepSize, 2*maxR];
 
             Parallel.For(0, inputImage.GetLength(0), (x) => {
@@ -1505,6 +1508,95 @@ namespace ImageApp
             return AdjustContrast(labels);
         }
 
+        private byte[,] HoughTrafficCone(byte[,] inputImage)
+        {
+            byte[,] temp = ConvolveImage(inputImage, CreateGaussianFilter(5, 1.0f));
+            temp = EdgeMagnitude(temp, PrewittHorizontal, PrewittVertical);
+            temp = ThresholdImage(temp, 55);
+            int[,] accumArr = HoughTransform(temp);
+            var (peaks, _) = HoughPeakFinding(accumArr, 20);
+            var (viz, lines) = HoughLineSegments(temp, peaks, 50, 30, 5);
+
+            List<LineSet> linesBetweenAngle = findLinesBetweenAngle(lines, 12, 18);
+
+            linesBetweenAngle = findPerpendicularLines(linesBetweenAngle, lines);
+
+            return inputImage;
+        }
+
+        private List<LineSet> findLinesBetweenAngle(List<((int, int), (int, int))> lines, int minAngle, int maxAngle)
+        {
+            List<LineSet> output = new List<LineSet>();
+
+            for (int i = 0; i <= lines.Count; i++) 
+            for (int j = i+1; j <= lines.Count; j++)
+            {
+                // gradients of lines
+                //                                y2                     y1                              x2                     x1
+                float m1 = (float)(lines[i].Item2.Item2 - lines[i].Item1.Item2) / (float)(lines[i].Item2.Item1 - lines[i].Item1.Item1);
+                float m2 = (float)(lines[j].Item2.Item2 - lines[j].Item1.Item2) / (float)(lines[j].Item2.Item1 - lines[j].Item1.Item1); 
+
+                // intercepts of lines
+                float c1 = lines[i].Item1.Item2 - m1 * lines[i].Item1.Item1;
+                float c2 = lines[j].Item1.Item2 - m1 * lines[j].Item1.Item1;
+
+                // angles between lines
+                float theta = MathF.Atan(MathF.Abs((m1-m2)/(1+m1*m2)));   
+
+                if (theta >= minAngle && theta <= maxAngle)
+                {
+                    LineSet ls; 
+                    ls.l1_p1 = lines[i].Item1;  
+                    ls.l1_p2 = lines[i].Item2;
+                    ls.l2_p1 = lines[j].Item1;
+                    ls.l2_p2 = lines[j].Item2;   
+
+                    // y coord of intersection point
+                    ls.intsectY = m1 * ((c2 - c1) / (m1 - m2)) + c1;
+
+                    // gradient of the bisector of the two lines
+                    ls.bisectorGradient = MathF.Tan((MathF.Atan(m1) + MathF.Atan(m2)) / 2);
+
+                    ls.perpLines = new List<((int, int), (int, int))>();
+
+                    output.Add(ls);
+                }    
+            }
+
+            return output;
+        }
+
+        private List<LineSet> findPerpendicularLines(List<LineSet> lineSets, List<((int, int), (int, int))> lines)
+        {
+            foreach (LineSet ls in lineSets)
+            { 
+                foreach (((int, int),(int, int)) line in lines)
+                {
+                    // gradient line   
+                    float m = (float)(line.Item2.Item2 - line.Item1.Item2) / (float)(line.Item2.Item1 - line.Item1.Item1);
+
+                    // angle between bisector and line
+                    float theta = MathF.Atan(MathF.Abs((m-ls.bisectorGradient)/(1+m*ls.bisectorGradient)));                     
+
+                    // check perpendicular with 1.5 degrees of error && lower than intersection point
+                    if ((theta >= 88.5 || theta <= 91.5) && line.Item1.Item2 <= ls.intsectY && line.Item2.Item2 <= ls.intsectY) ls.perpLines.Add(line); 
+                } 
+            }
+
+            return lineSets;
+        }
+
+        struct LineSet()
+        {
+            public (int, int) l1_p1;
+            public (int, int) l1_p2;
+            public (int, int) l2_p1;
+            public (int, int) l2_p2;
+            public float bisectorGradient;
+            public float intsectY;
+
+            public List<((int, int), (int, int))> perpLines;
+        }
         private byte[,,] Sift(byte[,] inputImage)
         {
             // Detect scale-space extrema
