@@ -10,6 +10,9 @@ using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using System.IO.Compression;
 using Avalonia.Media;
+using Avalonia.Input;
+using System.Xml.Serialization;
+using Avalonia.Layout;
 
 namespace ImageApp
 {
@@ -57,6 +60,7 @@ namespace ImageApp
             BinaryPipeline,
             GrayscalePipeline,
             FloodFill,
+            Sift,
         }
 
         public MainWindow()
@@ -415,7 +419,7 @@ namespace ImageApp
 
                         case ProcessingFunctions.HoughLineSegments:
                         {
-                            List<(int, int)> listOfPeaks = [(50, 50), (0, 0), (20, 20)];
+                            List<(int, int)> listOfPeaks = HoughPeakFinding(HoughTransform(gray), t_peak).Item1;
                             int minIntensityThreshold = 50;
                             int minSegmentLength = 0;
                             int maxGapParameter = 0;
@@ -440,6 +444,10 @@ namespace ImageApp
                             result = FloodFill(gray);
                             break;
                         
+                        case ProcessingFunctions.Sift:
+                            result = Sift(gray);
+                            break; 
+
                         default:
                             throw new NotSupportedException($"Operation '{selected}' is not implemented in the OnApply switch.");
                     }
@@ -1497,6 +1505,196 @@ namespace ImageApp
             return AdjustContrast(labels);
         }
 
+        private byte[,,] Sift(byte[,] inputImage)
+        {
+            // Detect scale-space extrema
+            int octaves = 3;
+            int s = 3;
+            int layersPerOctave = s + 3;
+            float initialSigma = 1.6F;
+            // building the HIERARCHICAL SCALE SPACE
+            // Structure: [layer][image] -> byte[,] image
+            byte[][][,] hierarchicalScaleSpace = new byte[octaves][][,];
+            //byte[,] currentBaseImage = (byte[,])inputImage.Clone();
+            float k = (float) Math.Pow(2.0, 1.0 / s); 
+            byte[,] baseImage = ConvolveImage(inputImage, CreateGaussianFilter(5, initialSigma));
+
+            for (int octave = 0; octave < octaves; octave++)
+            {
+                hierarchicalScaleSpace[octave] = new byte[layersPerOctave][,]; 
+                hierarchicalScaleSpace[octave][0] = baseImage;
+                for (int layer = 1; layer < layersPerOctave; layer++)
+                {
+                    // calculating the sigma value to be used for this layer + applying it
+                    float prevSigma = initialSigma * (float)Math.Pow(k, layer - 1);
+                    float targetSigma = prevSigma * k;
+                    float blurAmount = (float) Math.Sqrt(targetSigma * targetSigma - prevSigma * prevSigma);
+                    hierarchicalScaleSpace[octave][layer] = ConvolveImage(hierarchicalScaleSpace[octave][layer-1], CreateGaussianFilter(5, blurAmount));
+                }
+
+                if (octave < octaves -1)
+                {
+                    // resizing the image "decimation"
+                    byte[,] src = hierarchicalScaleSpace[octave][s];
+                    int nextW  = src.GetLength(0) / 2;
+                    int nextH = src.GetLength(1) / 2;
+                    baseImage = new byte[nextW, nextH];
+                    for (int x = 0; x < nextW; x++)
+                    for (int y = 0; y < nextH; y++)
+                    {
+                        baseImage[x, y] = src[x * 2, y * 2];
+                    }
+                }
+            }
+            
+            // building the DoG
+            int[][][,] dog = new int[octaves][][,];
+            for (int octave = 0; octave < octaves; octave++)
+            {
+                dog[octave] = new int[layersPerOctave - 1][,];
+                for(int layer = 0; layer < layersPerOctave -1 ; layer++)
+                {
+                    int w = hierarchicalScaleSpace[octave][layer].GetLength(0);
+                    int h = hierarchicalScaleSpace[octave][layer].GetLength(1);
+                    dog[octave][layer] =  new int[w, h];
+                    for(int x = 0; x < hierarchicalScaleSpace[octave][layer].GetLength(0); x++)
+                    for(int y = 0; y < hierarchicalScaleSpace[octave][layer].GetLength(1); y++)
+                    {
+                        dog[octave][layer][x,y] = hierarchicalScaleSpace[octave][layer+1][x,y] - hierarchicalScaleSpace[octave][layer][x,y];
+                    }
+                }
+            }
+            // Detect keypoints
+            // Finding local maxima in the DoG space
+            var keyPoints = new List<(int octave, int layer, int x, int y)>();
+            for (int octave = 0; octave < octaves; octave++)
+            {
+                for(int layer = 1; layer < dog[octave].Length -1 ; layer++)
+                {
+                    int w = dog[octave][layer].GetLength(0);
+                    int h = dog[octave][layer].GetLength(1);
+                    for(int x = 1; x < w-1; x++)
+                    for(int y = 1; y < h-1; y++)
+                    {    
+                        int center = dog[octave][layer][x, y];
+                        //int max = dog[octave][layer][x,y];
+                        bool isMax = true;
+                        bool isMin = true;
+                        for(int dl = -1; dl <= 1; dl++)
+                        for(int px = -1; px <= 1; px++)
+                        for(int py = -1; py <= 1; py++)
+                        {
+                            if (dl == 0 && px == 0 && py == 0) continue;
+                            int neighbour = dog[octave][layer + dl][x + px, y + py];
+                            if (neighbour >= center) isMax = false;
+                            if (neighbour <= center) isMin = false;
+                        }
+                        if (isMax || isMin)
+                        keyPoints.Add((octave, layer, x, y));
+                    } 
+                }
+            }
+
+            // Refining the keypoint positions
+            // eliminate low-contrast points 
+            // threshold used in slides: 0.03 --> we have to multiply it by 255 (because range is 0-255 intead of 0-1)
+            double threshold = 0.01 * 255;
+            Console.WriteLine($"After extrema: {keyPoints.Count}");
+            keyPoints.RemoveAll(kp => Math.Abs(dog[kp.octave][kp.layer][kp.x, kp.y]) < threshold);
+            Console.WriteLine($"After contrast: {keyPoints.Count}");
+            // suppress responses to edge-like structures
+            // compute the 2nd derivateives along x and y for each keypoint!
+            
+            var validKeyPoints = new List<(int octave, int layer, int x, int y)>();
+            foreach(var kp in keyPoints)
+            {
+                int[,] D = dog[kp.octave][kp.layer];
+                int cx = kp.x;
+                int cy = kp.y;
+                float dxx = dog[kp.octave][kp.layer][cx+1, cy] + dog[kp.octave][kp.layer][cx-1, cy] - 2 * dog[kp.octave][kp.layer][kp.x, kp.y];
+                float dyy = dog[kp.octave][kp.layer][cx, cy+1] + dog[kp.octave][kp.layer][cx, cy-1] - 2 * dog[kp.octave][kp.layer][kp.x, kp.y];
+                float dxy = (dog[kp.octave][kp.layer][cx+1, cy+1] - dog[kp.octave][kp.layer][cx+1, cy-1] - dog[kp.octave][kp.layer][kp.x-1, kp.y+1] + dog[kp.octave][kp.layer][kp.x-1, kp.y-1]) / 4;
+                float tr = dxx + dyy;
+                float det = dxx * dyy - (dxy*dxy);
+                //int r = 10;
+                //if (deth <= 0) continue;
+                //if (tr*tr/det >= (r+1)*(r+1)/r) continue;
+                if (det <= 0 || tr * tr / det >= 12.1f) continue;
+                validKeyPoints.Add(kp);
+            }
+
+            keyPoints = validKeyPoints;
+            Console.WriteLine($"After edge test: {keyPoints.Count}");
+            // Determine the keypoint’s dominant orientation
+            (float mag, float angle) Gradient(byte[,] L, int x, int y)
+            {
+                float gx = L[x + 1, y] - L[x - 1, y];
+                float gy = L[x, y + 1] - L[x, y - 1];
+                return (MathF.Sqrt(gx * gx + gy * gy), MathF.Atan2(gy, gx)); // angle in -π..π
+            }
+            //private int dominantOrientation(int orientations, int localRegionSize, int cx, int cy, int dOrientation = 0)
+            //returns the histogram with the orientations 
+            int localRegionSize = 1; // REVISIT THIS
+            int bins = 36; //2pi/36 for each bin
+            var keyPointsOrientation = new List<(int octave, int layer, int x, int y, float Orientation)>();
+            foreach(var kp in keyPoints)
+            {
+                byte[,] L = hierarchicalScaleSpace[kp.octave][kp.layer];
+                int w = L.GetLength(0);
+                int h = L.GetLength(1);
+                float sigma = initialSigma * MathF.Pow(k, kp.layer);
+                float sigmaW = 1.5f * sigma;
+                int r = (int)MathF.Round(3 * sigmaW);
+                float [] histogram =  new float[bins];
+                float twoPi = 2f * MathF.PI;
+                for (int x = Math.Max(1, kp.x - r); x <= Math.Min(w - 2, kp.x + r); x++)
+                for (int y = Math.Max(1, kp.y - r); y <= Math.Min(h - 2, kp.y + r); y++)
+                {
+                    float dx = x - kp.x;
+                    float dy = y - kp.y;
+                    float weight = MathF.Exp(-(dx * dx + dy * dy) / (2f * sigmaW * sigmaW));
+                    var (mag, angle) = Gradient(L, x, y);
+                    if (angle < 0) angle += twoPi;                 // Atan2 gives -π..π, shift to 0..2π
+                    int bin = (int)(angle / twoPi * bins);          // 0..bins-1
+                    if (bin == bins) bin = 0;                       // guards the edge case angle == 2π
+                    histogram[bin] += mag * weight;
+
+                }
+                    // dominant orientation = center of the biggest bin
+                int best = 0;
+                for (int i = 1; i < bins; i++)
+                    if (histogram[i] > histogram[best]) best = i;
+                float dOrientation = (best + 0.5f) * twoPi / bins;
+                keyPointsOrientation.Add((kp.octave, kp.layer, kp.x, kp.y, dOrientation));
+            }
+
+            // Determine local descriptor
+            int outW = inputImage.GetLength(0);
+            int outH = inputImage.GetLength(1);
+            byte[,,] output = new byte[outW, outH, 3];
+            for (int x = 0; x < outW; x++)
+            for (int y = 0; y < outH; y++)
+            for (int c = 0; c < 3; c++)
+                output[x, y, c] = inputImage[x, y];
+
+            // just to paint the pixel red!
+            void SetRed(int x, int y)
+            {
+                if (x < 0 || y < 0 || x >= outW || y >= outH) return;
+                output[x, y, 0] = 255;
+                output[x, y, 1] = 0;
+                output[x, y, 2] = 0;
+            }
+
+            // drawing every keypoint
+            foreach (var kp in keyPointsOrientation)
+            {
+                int ox = kp.x * (1 << kp.octave);
+                int oy = kp.y * (1 << kp.octave);
+                for (int t = -3; t <= 3; t++) { SetRed(ox + t, oy); SetRed(ox, oy + t); }
+            }
+            return output;
+        }
 
         // ====================================================================
         // ==================== IMAGE <-> BITMAP HELPERS (given) =============
