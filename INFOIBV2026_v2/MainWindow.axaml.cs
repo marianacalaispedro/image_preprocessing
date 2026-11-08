@@ -64,6 +64,7 @@ namespace ImageApp
             GrayscalePipeline,
             FloodFill,
             Sift,
+            HoughTrafficCone,
         }
 
         public MainWindow()
@@ -450,6 +451,10 @@ namespace ImageApp
                         case ProcessingFunctions.Sift:
                             result = Sift(gray);
                             break; 
+
+                        case ProcessingFunctions.HoughTrafficCone:
+                            result = HoughTrafficCone(gray, colorPixels);
+                            break;
 
                         default:
                             throw new NotSupportedException($"Operation '{selected}' is not implemented in the OnApply switch.");
@@ -1244,14 +1249,15 @@ namespace ImageApp
             }
 
             int maxR = (int)MathF.Ceiling(MathF.Sqrt(offsetX*offsetX + offsetY*offsetY)) + 1;
-            int[,] accumArr = new int[360/thetaStepSize, 2*maxR];
+            
+            int[,] accumArr = new int[180/thetaStepSize, 2*maxR];
 
             Parallel.For(0, inputImage.GetLength(0), (x) => {
             Parallel.For(0, inputImage.GetLength(1), (y) =>
             {
                 if (inputImage[x,y] > 0) 
                 {    
-                    for (float theta = 0; theta < 360/thetaStepSize; theta += thetaStepSize)
+                    for (float theta = 0; theta < 180/thetaStepSize; theta += thetaStepSize)
                     {
                         float rF = ((x - offsetX) * MathF.Cos(theta / 180.0f * MathF.PI)) + ((y - offsetY) * MathF.Sin(theta / 180.0f * MathF.PI));
                         int r = (int)MathF.Round(rF * rLoD) / rLoD;  // round to level of detail of r
@@ -1325,7 +1331,9 @@ namespace ImageApp
 
             int offsetX = inputImage.GetLength(0)/2;
             int offsetY = inputImage.GetLength(1)/2;
-            int maxR = inputImage.GetLength(0) - 1 - offsetX + inputImage.GetLength(1) - 1 - offsetY;
+            // int maxR = inputImage.GetLength(0) - 1 - offsetX + inputImage.GetLength(1) - 1 - offsetY;
+            int maxR = (int)MathF.Ceiling(MathF.Sqrt(offsetX * offsetX + offsetY * offsetY)) + 1;
+            
             
             // make inputImage a color image
             Parallel.For(0, inputImage.GetLength(0), x =>
@@ -1508,82 +1516,312 @@ namespace ImageApp
             return AdjustContrast(labels);
         }
 
-        private byte[,] HoughTrafficCone(byte[,] inputImage)
+        private byte[,,] HoughTrafficCone(byte[,] inputImage, byte[,,] colorImage) 
         {
-            byte[,] temp = ConvolveImage(inputImage, CreateGaussianFilter(5, 1.0f));
-            temp = EdgeMagnitude(temp, PrewittHorizontal, PrewittVertical);
-            temp = ThresholdImage(temp, 55);
+            const int maxDim = 640;
+            const int edgeThresh = 60;
+            const int maxPeaks = 60;
+            const int minSegLen = 70;
+            const int maxGap = 10;
+            const float maxKeypointDensity = 2.0f;
+
+            // NEW: downscale gray + colour so pixel-based parameters mean the same for every image
+            int w0 = inputImage.GetLength(0), h0 = inputImage.GetLength(1);                       
+            float scale = MathF.Min(1f, maxDim / (float)Math.Max(w0, h0));                        
+            int w = Math.Max(1, (int)(w0 * scale)), h = Math.Max(1, (int)(h0 * scale));          
+            byte[,] smallGray = new byte[w, h];                                                   
+            byte[,,] smallColor = new byte[w, h, 3];                                             
+            for (int x = 0; x < w; x++)                                                          
+            for (int y = 0; y < h; y++)                                                          
+            {
+                int sx = Math.Min(w0 - 1, (int)(x / scale));                                    
+                int sy = Math.Min(h0 - 1, (int)(y / scale));                                      
+                smallGray[x, y] = inputImage[sx, sy];                                          
+                for (int c = 0; c < 3; c++) smallColor[x, y, c] = colorImage[sx, sy, c];        
+            }
+            inputImage = smallGray;                                                               
+
+            var siftPoints = Sift(inputImage); 
+            // edges are computed PER COLOR CHANNEL channel and merged with a per-pixel max,
+            // because orange vs gray asphalt has almost no contrast in the averaged grayscale image.
+            float[,] gauss = CreateGaussianFilter(5, 1.5f);                                   
+            byte[,] temp = new byte[w, h];                                                    
+            for (int c = 0; c < 3; c++)                                                      
+            {
+                byte[,] channel = new byte[w, h];                                             
+                for (int x = 0; x < w; x++)                                                   
+                for (int y = 0; y < h; y++)                                                   
+                    channel[x, y] = smallColor[x, y, c];                                      
+                channel = ConvolveImage(channel, gauss);                                      
+                channel = EdgeMagnitude(channel, PrewittHorizontal, PrewittVertical);         
+                for (int x = 0; x < w; x++)                                                   
+                for (int y = 0; y < h; y++)                                                  
+                    if (channel[x, y] > temp[x, y]) temp[x, y] = channel[x, y];               
+            }
+            temp = ThresholdImage(temp, edgeThresh);                                      
+
             int[,] accumArr = HoughTransform(temp);
-            var (peaks, _) = HoughPeakFinding(accumArr, 20);
-            var (viz, lines) = HoughLineSegments(temp, peaks, 50, 30, 5);
 
-            List<LineSet> linesBetweenAngle = findLinesBetweenAngle(lines, 12, 18);
+            // accumulator gave thousands of near-duplicate peaks. Now only strongest peaks only, merged if close.
+            int maxVotes = 0;                                                                     
+            foreach (int v in accumArr) if (v > maxVotes) maxVotes = v;                          
+            int minVotes = Math.Max(30, (int)(0.15 * maxVotes));                                  
+            var cand = new List<(int v, int t, int r)>();                                       
+            for (int t = 0; t < accumArr.GetLength(0); t++)                                  
+            for (int r = 0; r < accumArr.GetLength(1); r++)                                       
+                if (accumArr[t, r] >= minVotes) cand.Add((accumArr[t, r], t, r));                 
+            cand.Sort((a, b) => b.v.CompareTo(a.v));                                            
+            var peaks = new List<(int, int)>();                                                 
+            foreach (var p in cand)                                                             
+            {
+                bool close = false;                                                               
+                foreach (var q in peaks)                                                         
+                    if (Math.Abs(q.Item2 - p.t) <= 6 && Math.Abs(q.Item1 - p.r) <= 10) { close = true; break; } 
+                if (close) continue;                                                             
+                peaks.Add((p.r, p.t));                                                            
+                if (peaks.Count >= maxPeaks) break;                                               
+            }
 
-            linesBetweenAngle = findPerpendicularLines(linesBetweenAngle, lines);
+            Console.WriteLine($"[1] maxVotes={maxVotes}, minVotes={minVotes}, peaks={peaks.Count}");
 
-            return inputImage;
+            var (viz, lines) = HoughLineSegments(temp, peaks, 15, minSegLen, maxGap);
+            Console.WriteLine($"[2] segments={lines.Count}");
+
+            List<LineSet> linesBetweenAngle = findLinesBetweenAngle(lines, lines, 10, 60); 
+            
+            Console.WriteLine($"Lines found: {linesBetweenAngle.Count}");
+            var foundCenters = new List<(float x, float y)>();
+
+            int finalConeCount = 0;
+
+            foreach (LineSet ls in linesBetweenAngle)
+            {
+                int margin = 10;
+                int highestY = (int)Math.Min(ls.intersection.y, Math.Min(ls.base1.Item2, ls.base2.Item2));
+                int lowestY = (int)Math.Max(ls.intersection.y, Math.Max(ls.base1.Item2, ls.base2.Item2));
+                int leftX = (int)Math.Min(ls.intersection.x, Math.Min(ls.base1.Item1, ls.base2.Item1));
+                int rightX = (int)Math.Max(ls.intersection.x, Math.Max(ls.base1.Item1, ls.base2.Item1));
+
+                int minX = leftX - margin;
+                int maxX = rightX + margin;
+                int minY = highestY - margin;
+                int maxY = lowestY + margin;
+
+                // Skip duplicates
+                float centerX = (minX + maxX) / 2f;
+                float centerY = (minY + maxY) / 2f;
+                bool isDuplicate = false;
+
+                foreach (var center in foundCenters)
+                {
+                    float dist = MathF.Sqrt((center.x - centerX) * (center.x - centerX) + (center.y - centerY) * (center.y - centerY));
+                    if (dist < 100f) { isDuplicate = true; break; }
+                }
+                if (isDuplicate) continue;
+
+                // SIFT texture test. A cone body is smooth, so the triangle (apex, base1, base2)
+                // should contain FEW keypoints. Trees, text and gravel contain many.
+                int inside = 0;                                                                            
+                foreach (var kp in siftPoints)                                                             
+                {
+                    float kx = kp.x * (1 << kp.octave);                                                    
+                    float ky = kp.y * (1 << kp.octave);                                                    
+                    float d1 = TriSign(kx, ky, ls.intersection.x, ls.intersection.y, ls.base1.Item1, ls.base1.Item2); 
+                    float d2 = TriSign(kx, ky, ls.base1.Item1, ls.base1.Item2, ls.base2.Item1, ls.base2.Item2);        
+                    float d3 = TriSign(kx, ky, ls.base2.Item1, ls.base2.Item2, ls.intersection.x, ls.intersection.y); 
+                    bool neg = d1 < 0 || d2 < 0 || d3 < 0, pos = d1 > 0 || d2 > 0 || d3 > 0;              
+                    if (!(neg && pos)) inside++;   
+                }
+
+                    float triArea = MathF.Abs(                                                             
+                        (ls.base1.Item1 - ls.intersection.x) * (ls.base2.Item2 - ls.intersection.y) -
+                        (ls.base2.Item1 - ls.intersection.x) * (ls.base1.Item2 - ls.intersection.y)) / 2f;    
+                    float density = inside / Math.Max(1f, triArea) * 1000f;                                    
+                    Console.WriteLine($"[5] keypoints inside triangle = {inside}, density = {density:F2}");                                            
+                    if (density > maxKeypointDensity) { Console.WriteLine($"[REJECT] density {density:F2}"); continue; }  
+                    
+                    // orange-colour check (refinement phase)
+                    int cx1 = Math.Max(0, minX), cx2 = Math.Min(w - 1, maxX);                         
+                    int cy1 = Math.Max(0, minY), cy2 = Math.Min(h - 1, maxY);                         
+                    
+                    int total = 0;
+                    int orange = 0;
+                    int white = 0;
+
+                    for (int x = cx1; x <= cx2; x++)                                                  
+                    for (int y = cy1; y <= cy2; y++)
+                    {
+                        // look just at the pixels INSIDE the triangle we defined!!
+                        float e1 = TriSign(x, y, ls.intersection.x, ls.intersection.y, ls.base1.Item1, ls.base1.Item2);
+                        float e2 = TriSign(x, y, ls.base1.Item1, ls.base1.Item2, ls.base2.Item1, ls.base2.Item2);
+                        float e3 = TriSign(x, y, ls.base2.Item1, ls.base2.Item2, ls.intersection.x, ls.intersection.y);
+                        bool ng = e1 < 0 || e2 < 0 || e3 < 0, ps = e1 > 0 || e2 > 0 || e3 > 0;
+                        if (ng && ps) continue; 
+                        total++;
+                        if (IsOrange(smallColor[x, y, 0], smallColor[x, y, 1], smallColor[x, y, 2])) orange++;
+                        else if (IsWhite(smallColor[x, y, 0], smallColor[x, y, 1], smallColor[x, y, 2])) white++;
+                    }
+                    float orangeFrac = orange / (float)Math.Max(1, total);                            
+                    float whiteFrac  = white  / (float)Math.Max(1, total);
+                    if (total == 0 || orangeFrac < 0.10f || orangeFrac + whiteFrac < 0.30f)            
+                    {
+                        Console.WriteLine($"[REJECT] orange {orangeFrac:F2}, white {whiteFrac:F2}");
+                        continue;
+                    }         
+
+                    foundCenters.Add((centerX, centerY));
+                    finalConeCount++;
+                    
+                    // Draw Box
+                    DrawBox(minX, minY, maxX, maxY, viz);
+                    
+                    // Draw Blue Tip
+                    int tipX = (int)ls.intersection.x;
+                    int tipY = (int)ls.intersection.y;
+                    for (int t = -4; t <= 4; t++)
+                    {
+                        if (tipX + t >= 0 && tipX + t < viz.GetLength(0) && tipY >= 0 && tipY < viz.GetLength(1))
+                        { viz[tipX + t, tipY, 0] = 0; viz[tipX + t, tipY, 1] = 128; viz[tipX + t, tipY, 2] = 255; }
+                        if (tipX >= 0 && tipX < viz.GetLength(0) && tipY + t >= 0 && tipY + t < viz.GetLength(1))
+                        { viz[tipX, tipY + t, 0] = 0; viz[tipX, tipY + t, 1] = 128; viz[tipX, tipY + t, 2] = 255; }
+                    }
+                }
+                
+                Console.WriteLine($"Cones found: {finalConeCount}"); // NEW: useful while tuning
+                return viz;
+        }
+            
+            
+
+        //orange test (hue 0-40 or 350-360, saturated, bright enough). Only used in refinement.
+        private static bool IsOrange(byte r, byte g, byte b)
+        {
+            int max = Math.Max(r, Math.Max(g, b));
+            int min = Math.Min(r, Math.Min(g, b));
+            if (max < 90 || max != r) return false;       // too dark, or red isn't the dominant channel
+            float s = (max - min) / (float)max;
+            if (s < 0.5f) return false;                   // not saturated enough
+            float hue = 60f * (g - b) / (max - min);
+            if (hue < 0) hue += 360f;
+            return hue <= 40f || hue >= 350f;
         }
 
-        private List<LineSet> findLinesBetweenAngle(List<((int, int), (int, int))> lines, int minAngle, int maxAngle)
+        // NEW: white/bright-grey test for the reflective bands. Low saturation, high brightness.
+        private static bool IsWhite(byte r, byte g, byte b)
+        {
+            int max = Math.Max(r, Math.Max(g, b));
+            int min = Math.Min(r, Math.Min(g, b));
+            if (max < 200) return false;                    // too dark to be a white band (shade or overcast still stays above this)
+            float s = (max - min) / (float)max;
+            return s < 0.15f;                               // nearly colourless
+        }
+
+        private static float TriSign(float px, float py, float x1, float y1, float x2, float y2) =>
+         (px - x2) * (y1 - y2) - (x1 - x2) * (py - y2);
+
+        // Draws a rectangle border
+        void DrawBox(int x1, int y1, int x2, int y2, byte[,,] img)
+        {
+            // top and bottom edges
+            for (int x = x1; x <= x2; x++)
+            {
+                if (x >= 0 && x < img.GetLength(0))
+                {
+                    if (y1 >= 0 && y1 < img.GetLength(1)) { img[x, y1, 0] = 0; img[x, y1, 1] = 255; img[x, y1, 2] = 0; }
+                    if (y2 >= 0 && y2 < img.GetLength(1)) { img[x, y2, 0] = 0; img[x, y2, 1] = 255; img[x, y2, 2] = 0; }
+                }
+            }
+            // left and right edges
+            for (int y = y1; y <= y2; y++)
+            {
+                if (y >= 0 && y < img.GetLength(1))
+                {
+                    if (x1 >= 0 && x1 < img.GetLength(0)) { img[x1, y, 0] = 0; img[x1, y, 1] = 255; img[x1, y, 2] = 0; }
+                    if (x2 >= 0 && x2 < img.GetLength(0)) { img[x2, y, 0] = 0; img[x2, y, 1] = 255; img[x2, y, 2] = 0; }
+                }
+            }
+        }
+        
+        private List<LineSet> findLinesBetweenAngle(List<((int, int), (int, int))> allLines, List<((int, int), (int, int))> lines, int minAngle, int maxAngle)
         {
             List<LineSet> output = new List<LineSet>();
 
-            for (int i = 0; i <= lines.Count; i++) 
-            for (int j = i+1; j <= lines.Count; j++)
+            for (int i = 0; i < lines.Count; i++) 
+            for (int j = i+1; j < lines.Count; j++)
             {
-                // gradients of lines
-                //                                y2                     y1                              x2                     x1
-                float m1 = (float)(lines[i].Item2.Item2 - lines[i].Item1.Item2) / (float)(lines[i].Item2.Item1 - lines[i].Item1.Item1);
-                float m2 = (float)(lines[j].Item2.Item2 - lines[j].Item1.Item2) / (float)(lines[j].Item2.Item1 - lines[j].Item1.Item1); 
+                // creating direction vectors 
+                // (d1x, d1y) --> represent 1st line segment
+                // (d2x, d2y) --> represent 2nd line segment
+                float d1x = lines[i].Item2.Item1 - lines[i].Item1.Item1;
+                float d1y = lines[i].Item2.Item2 - lines[i].Item1.Item2;
+                float d2x = lines[j].Item2.Item1 - lines[j].Item1.Item1;
+                float d2y = lines[j].Item2.Item2 - lines[j].Item1.Item2;
+                // norm of a vector 
+                float len1 = MathF.Sqrt(d1x * d1x + d1y * d1y);
+                float len2 = MathF.Sqrt(d2x * d2x + d2y * d2y);
+                // filtering out super small lines!! (1 of leght...)
+                if (len1 < 1 || len2 < 1) continue;
 
-                // intercepts of lines
-                float c1 = lines[i].Item1.Item2 - m1 * lines[i].Item1.Item1;
-                float c2 = lines[j].Item1.Item2 - m1 * lines[j].Item1.Item1;
-
-                // angles between lines
-                float theta = MathF.Atan(MathF.Abs((m1-m2)/(1+m1*m2)));   
+                
+                float cosA = MathF.Abs(d1x * d2x + d1y * d2y) / (len1 * len2);
+                float theta = MathF.Acos(MathF.Min(1f, cosA)) * 180f / MathF.PI;
 
                 if (theta >= minAngle && theta <= maxAngle)
                 {
-                    LineSet ls; 
-                    ls.l1_p1 = lines[i].Item1;  
+                    // intersection of the two extended lines
+                    float cross = d1x * d2y - d1y * d2x;
+                    if (MathF.Abs(cross) < 1e-6f) continue;   // parallel
+                    float t = ((lines[j].Item1.Item1 - lines[i].Item1.Item1) * d2y
+                            - (lines[j].Item1.Item2 - lines[i].Item1.Item2) * d2x) / cross;
+                    float ix = lines[i].Item1.Item1 + t * d1x;
+                    float iy = lines[i].Item1.Item2 + t * d1y;
+
+                    float DistToI((int, int) p) =>
+                        MathF.Sqrt((p.Item1 - ix) * (p.Item1 - ix) + (p.Item2 - iy) * (p.Item2 - iy));
+
+                    // the end of each segment closest to the intersection
+                    var tip1 = DistToI(lines[i].Item1) <= DistToI(lines[i].Item2) ? lines[i].Item1 : lines[i].Item2;
+                    var tip2 = DistToI(lines[j].Item1) <= DistToI(lines[j].Item2) ? lines[j].Item1 : lines[j].Item2;
+                    
+                    // the intersection must be close to the tips, or random pairs would count as cones!!!
+                    if (DistToI(tip1) > len1 || DistToI(tip2) > len2) continue;
+
+
+                    // Get the other ends of the lines (the base of the cone)
+                    var base1 = DistToI(lines[i].Item1) > DistToI(lines[i].Item2) ? lines[i].Item1 : lines[i].Item2;
+                    var base2 = DistToI(lines[j].Item1) > DistToI(lines[j].Item2) ? lines[j].Item1 : lines[j].Item2;
+
+                    // Calculate the distance between the two bottom points
+                    float baseWidth = MathF.Sqrt(
+                    (base1.Item1 - base2.Item1) * (base1.Item1 - base2.Item1) + 
+                    (base1.Item2 - base2.Item2) * (base1.Item2 - base2.Item2)
+                    );
+
+                    // A traffic cone is at least 30-50 pixels wide at the bottom
+                    if (baseWidth < 15f) continue; // Skip this pair! It's just a leaf or noise.
+
+                    // Also, check the height of the cone (distance from tip to base)
+                    float coneHeight = MathF.Sqrt(
+                    (tip1.Item1 - base1.Item1) * (tip1.Item1 - base1.Item1) + 
+                    (tip1.Item2 - base1.Item2) * (tip1.Item2 - base1.Item2)
+                    );
+
+                    if (coneHeight < 10f) continue; // Skip! It's too short to be a cone.
+
+                    LineSet ls = new LineSet();
+                    ls.l1_p1 = lines[i].Item1;
                     ls.l1_p2 = lines[i].Item2;
                     ls.l2_p1 = lines[j].Item1;
-                    ls.l2_p2 = lines[j].Item2;   
-
-                    // y coord of intersection point
-                    ls.intsectY = m1 * ((c2 - c1) / (m1 - m2)) + c1;
-
-                    // gradient of the bisector of the two lines
-                    ls.bisectorGradient = MathF.Tan((MathF.Atan(m1) + MathF.Atan(m2)) / 2);
-
-                    ls.perpLines = new List<((int, int), (int, int))>();
-
+                    ls.l2_p2 = lines[j].Item2;
+                    ls.intersection = (ix, iy);
+                    ls.tip1 = tip1;
+                    ls.tip2 = tip2;
+                    ls.base1 = base1;
+                    ls.base2 = base2;
                     output.Add(ls);
-                }    
-            }
-
-            return output;
-        }
-
-        private List<LineSet> findPerpendicularLines(List<LineSet> lineSets, List<((int, int), (int, int))> lines)
-        {
-            foreach (LineSet ls in lineSets)
-            { 
-                foreach (((int, int),(int, int)) line in lines)
-                {
-                    // gradient line   
-                    float m = (float)(line.Item2.Item2 - line.Item1.Item2) / (float)(line.Item2.Item1 - line.Item1.Item1);
-
-                    // angle between bisector and line
-                    float theta = MathF.Atan(MathF.Abs((m-ls.bisectorGradient)/(1+m*ls.bisectorGradient)));                     
-
-                    // check perpendicular with 1.5 degrees of error && lower than intersection point
-                    if ((theta >= 88.5 || theta <= 91.5) && line.Item1.Item2 <= ls.intsectY && line.Item2.Item2 <= ls.intsectY) ls.perpLines.Add(line); 
-                } 
-            }
-
-            return lineSets;
+                }
+            } 
+            return output;  
         }
 
         struct LineSet()
@@ -1594,10 +1832,15 @@ namespace ImageApp
             public (int, int) l2_p2;
             public float bisectorGradient;
             public float intsectY;
+            public (float x, float y) intersection;
+            public (int, int) tip1;
+            public (int, int) tip2;
+            public (int, int) base1; 
+            public (int, int) base2;
 
             public List<((int, int), (int, int))> perpLines;
         }
-        private byte[,,] Sift(byte[,] inputImage)
+        private List<(int octave, int layer, int x, int y, float Orientation)> Sift(byte[,] inputImage)
         {
             // Detect scale-space extrema
             int octaves = 3;
@@ -1690,7 +1933,7 @@ namespace ImageApp
             // Refining the keypoint positions
             // eliminate low-contrast points 
             // threshold used in slides: 0.03 --> we have to multiply it by 255 (because range is 0-255 intead of 0-1)
-            double threshold = 0.01 * 255;
+            double threshold = 0.009 * 255;
             Console.WriteLine($"After extrema: {keyPoints.Count}");
             keyPoints.RemoveAll(kp => Math.Abs(dog[kp.octave][kp.layer][kp.x, kp.y]) < threshold);
             Console.WriteLine($"After contrast: {keyPoints.Count}");
@@ -1726,7 +1969,6 @@ namespace ImageApp
             }
             //private int dominantOrientation(int orientations, int localRegionSize, int cx, int cy, int dOrientation = 0)
             //returns the histogram with the orientations 
-            int localRegionSize = 1; // REVISIT THIS
             int bins = 36; //2pi/36 for each bin
             var keyPointsOrientation = new List<(int octave, int layer, int x, int y, float Orientation)>();
             foreach(var kp in keyPoints)
@@ -1759,33 +2001,7 @@ namespace ImageApp
                 float dOrientation = (best + 0.5f) * twoPi / bins;
                 keyPointsOrientation.Add((kp.octave, kp.layer, kp.x, kp.y, dOrientation));
             }
-
-            // Determine local descriptor
-            int outW = inputImage.GetLength(0);
-            int outH = inputImage.GetLength(1);
-            byte[,,] output = new byte[outW, outH, 3];
-            for (int x = 0; x < outW; x++)
-            for (int y = 0; y < outH; y++)
-            for (int c = 0; c < 3; c++)
-                output[x, y, c] = inputImage[x, y];
-
-            // just to paint the pixel red!
-            void SetRed(int x, int y)
-            {
-                if (x < 0 || y < 0 || x >= outW || y >= outH) return;
-                output[x, y, 0] = 255;
-                output[x, y, 1] = 0;
-                output[x, y, 2] = 0;
-            }
-
-            // drawing every keypoint
-            foreach (var kp in keyPointsOrientation)
-            {
-                int ox = kp.x * (1 << kp.octave);
-                int oy = kp.y * (1 << kp.octave);
-                for (int t = -3; t <= 3; t++) { SetRed(ox + t, oy); SetRed(ox, oy + t); }
-            }
-            return output;
+            return keyPointsOrientation;
         }
 
         // ====================================================================
