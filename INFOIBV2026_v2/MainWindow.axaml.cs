@@ -1587,7 +1587,7 @@ namespace ImageApp
             var (viz, lines) = HoughLineSegments(temp, peaks, 15, minSegLen, maxGap);
             Console.WriteLine($"[2] segments={lines.Count}");
 
-            List<LineSet> linesBetweenAngle = findLinesBetweenAngle(lines, lines, 10, 60); 
+            List<LineSet> linesBetweenAngle = findLinesBetweenAngle(lines, lines, 10, 25); 
             
             Console.WriteLine($"Lines found: {linesBetweenAngle.Count}");
             var foundCenters = new List<(float x, float y)>();
@@ -1633,62 +1633,62 @@ namespace ImageApp
                     if (!(neg && pos)) inside++;   
                 }
 
-                    float triArea = MathF.Abs(                                                             
-                        (ls.base1.Item1 - ls.intersection.x) * (ls.base2.Item2 - ls.intersection.y) -
-                        (ls.base2.Item1 - ls.intersection.x) * (ls.base1.Item2 - ls.intersection.y)) / 2f;    
-                    float density = inside / Math.Max(1f, triArea) * 1000f;                                    
-                    Console.WriteLine($"[5] keypoints inside triangle = {inside}, density = {density:F2}");                                            
-                    if (density > maxKeypointDensity) { Console.WriteLine($"[REJECT] density {density:F2}"); continue; }  
+                float triArea = MathF.Abs(                                                             
+                    (ls.base1.Item1 - ls.intersection.x) * (ls.base2.Item2 - ls.intersection.y) -
+                    (ls.base2.Item1 - ls.intersection.x) * (ls.base1.Item2 - ls.intersection.y)) / 2f;    
+                float density = inside / Math.Max(1f, triArea) * 1000f;                                    
+                Console.WriteLine($"[5] keypoints inside triangle = {inside}, density = {density:F2}");                                            
+                if (density > maxKeypointDensity) { Console.WriteLine($"[REJECT] density {density:F2}"); continue; }  
                     
-                    // orange-colour check (refinement phase)
-                    int cx1 = Math.Max(0, minX), cx2 = Math.Min(w - 1, maxX);                         
-                    int cy1 = Math.Max(0, minY), cy2 = Math.Min(h - 1, maxY);                         
+                // orange-colour check (refinement phase)
+                int cx1 = Math.Max(0, minX), cx2 = Math.Min(w - 1, maxX);                         
+                int cy1 = Math.Max(0, minY), cy2 = Math.Min(h - 1, maxY);                         
                     
-                    int total = 0;
-                    int orange = 0;
-                    int white = 0;
+                int total = 0;
+                int orange = 0;
+                int white = 0;
 
-                    for (int x = cx1; x <= cx2; x++)                                                  
-                    for (int y = cy1; y <= cy2; y++)
-                    {
-                        // look just at the pixels INSIDE the triangle we defined!!
-                        float e1 = TriSign(x, y, ls.intersection.x, ls.intersection.y, ls.base1.Item1, ls.base1.Item2);
-                        float e2 = TriSign(x, y, ls.base1.Item1, ls.base1.Item2, ls.base2.Item1, ls.base2.Item2);
-                        float e3 = TriSign(x, y, ls.base2.Item1, ls.base2.Item2, ls.intersection.x, ls.intersection.y);
-                        bool ng = e1 < 0 || e2 < 0 || e3 < 0, ps = e1 > 0 || e2 > 0 || e3 > 0;
-                        if (ng && ps) continue; 
-                        total++;
-                        if (IsOrange(smallColor[x, y, 0], smallColor[x, y, 1], smallColor[x, y, 2])) orange++;
-                        else if (IsWhite(smallColor[x, y, 0], smallColor[x, y, 1], smallColor[x, y, 2])) white++;
-                    }
-                    float orangeFrac = orange / (float)Math.Max(1, total);                            
-                    float whiteFrac  = white  / (float)Math.Max(1, total);
-                    if (total == 0 || orangeFrac < 0.10f || orangeFrac + whiteFrac < 0.30f)            
-                    {
-                        Console.WriteLine($"[REJECT] orange {orangeFrac:F2}, white {whiteFrac:F2}");
-                        continue;
-                    }         
-
-                    foundCenters.Add((centerX, centerY));
-                    finalConeCount++;
-                    
-                    // Draw Box
-                    DrawBox(minX, minY, maxX, maxY, viz);
-                    
-                    // Draw Blue Tip
-                    int tipX = (int)ls.intersection.x;
-                    int tipY = (int)ls.intersection.y;
-                    for (int t = -4; t <= 4; t++)
-                    {
-                        if (tipX + t >= 0 && tipX + t < viz.GetLength(0) && tipY >= 0 && tipY < viz.GetLength(1))
-                        { viz[tipX + t, tipY, 0] = 0; viz[tipX + t, tipY, 1] = 128; viz[tipX + t, tipY, 2] = 255; }
-                        if (tipX >= 0 && tipX < viz.GetLength(0) && tipY + t >= 0 && tipY + t < viz.GetLength(1))
-                        { viz[tipX, tipY + t, 0] = 0; viz[tipX, tipY + t, 1] = 128; viz[tipX, tipY + t, 2] = 255; }
-                    }
+                for (int x = cx1; x <= cx2; x++)                                                  
+                for (int y = cy1; y <= cy2; y++)
+                {
+                    // look just at the pixels INSIDE the triangle we defined!!
+                    float e1 = TriSign(x, y, ls.intersection.x, ls.intersection.y, ls.base1.Item1, ls.base1.Item2);
+                    float e2 = TriSign(x, y, ls.base1.Item1, ls.base1.Item2, ls.base2.Item1, ls.base2.Item2);
+                    float e3 = TriSign(x, y, ls.base2.Item1, ls.base2.Item2, ls.intersection.x, ls.intersection.y);
+                    bool ng = e1 < 0 || e2 < 0 || e3 < 0, ps = e1 > 0 || e2 > 0 || e3 > 0;
+                    if (ng && ps) continue; 
+                    total++;
+                    if (IsOrange(smallColor[x, y, 0], smallColor[x, y, 1], smallColor[x, y, 2])) orange++;
+                    else if (IsWhite(smallColor[x, y, 0], smallColor[x, y, 1], smallColor[x, y, 2])) white++;
                 }
+                float orangeFrac = orange / (float)Math.Max(1, total);                            
+                float whiteFrac  = white  / (float)Math.Max(1, total);
+                if (total == 0 || orangeFrac < 0.10f || orangeFrac + whiteFrac < 0.30f)            
+                {
+                    Console.WriteLine($"[REJECT] orange {orangeFrac:F2}, white {whiteFrac:F2}");
+                    continue;
+                }         
+
+                foundCenters.Add((centerX, centerY));
+                finalConeCount++;
+                    
+                // Draw Box
+                DrawBox(minX, minY, maxX, maxY, viz);
+                    
+                // Draw Blue Tip
+                int tipX = (int)ls.intersection.x;
+                int tipY = (int)ls.intersection.y;
+                for (int t = -4; t <= 4; t++)
+                {
+                    if (tipX + t >= 0 && tipX + t < viz.GetLength(0) && tipY >= 0 && tipY < viz.GetLength(1))
+                    { viz[tipX + t, tipY, 0] = 0; viz[tipX + t, tipY, 1] = 128; viz[tipX + t, tipY, 2] = 255; }
+                    if (tipX >= 0 && tipX < viz.GetLength(0) && tipY + t >= 0 && tipY + t < viz.GetLength(1))
+                    { viz[tipX, tipY + t, 0] = 0; viz[tipX, tipY + t, 1] = 128; viz[tipX, tipY + t, 2] = 255; }
+                }
+            }
                 
-                Console.WriteLine($"Cones found: {finalConeCount}"); // NEW: useful while tuning
-                return viz;
+            Console.WriteLine($"Cones found: {finalConeCount}"); // NEW: useful while tuning
+            return viz;
         }
             
             
