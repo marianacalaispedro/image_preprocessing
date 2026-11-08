@@ -1424,11 +1424,6 @@ namespace ImageApp
                     output[point.Item1, point.Item2, 2] = 0;
                 }
             }
-
-            float dist((int, int) p1, (int, int) p2)
-            {
-                return MathF.Sqrt(MathF.Pow(p2.Item2 - p1.Item2, 2) + MathF.Pow(p2.Item1 - p1.Item1, 2));
-            }
         }
 
         private byte[,,] BinaryPipeline(byte[,] inputImage, byte t_mag, int t_peak, int minThresh, int minSegLen, int maxGap)
@@ -1519,8 +1514,11 @@ namespace ImageApp
         private byte[,,] HoughTrafficCone(byte[,] inputImage, byte[,,] colorImage) 
         {
             const int maxDim = 640;
+            const int gaussSize = 5;
+            const float gaussSigma = 1.5f;
             const int edgeThresh = 60;
             const int maxPeaks = 60;
+            const int minThresh = 15;
             const int minSegLen = 70;
             const int maxGap = 10;
             const float maxKeypointDensity = 2.0f;
@@ -1542,9 +1540,10 @@ namespace ImageApp
             inputImage = smallGray;                                                               
 
             var siftPoints = Sift(inputImage); 
+
             // edges are computed PER COLOR CHANNEL channel and merged with a per-pixel max,
             // because orange vs gray asphalt has almost no contrast in the averaged grayscale image.
-            float[,] gauss = CreateGaussianFilter(5, 1.5f);                                   
+            float[,] gauss = CreateGaussianFilter(gaussSize, gaussSigma);                                   
             byte[,] temp = new byte[w, h];                                                    
             for (int c = 0; c < 3; c++)                                                      
             {
@@ -1558,8 +1557,8 @@ namespace ImageApp
                 for (int y = 0; y < h; y++)                                                  
                     if (channel[x, y] > temp[x, y]) temp[x, y] = channel[x, y];               
             }
-            temp = ThresholdImage(temp, edgeThresh);                                      
 
+            temp = ThresholdImage(temp, edgeThresh);                                      
             int[,] accumArr = HoughTransform(temp);
 
             // accumulator gave thousands of near-duplicate peaks. Now only strongest peaks only, merged if close.
@@ -1584,12 +1583,12 @@ namespace ImageApp
 
             Console.WriteLine($"[1] maxVotes={maxVotes}, minVotes={minVotes}, peaks={peaks.Count}");
 
-            var (viz, lines) = HoughLineSegments(temp, peaks, 15, minSegLen, maxGap);
+            var (viz, lines) = HoughLineSegments(temp, peaks, minThresh, minSegLen, maxGap);
             Console.WriteLine($"[2] segments={lines.Count}");
 
-            List<LineSet> linesBetweenAngle = findLinesBetweenAngle(lines, lines, 10, 60); 
-            
+            List<LineSet> linesBetweenAngle = findLinesBetweenAngle(lines, lines, 10, 25); 
             Console.WriteLine($"Lines found: {linesBetweenAngle.Count}");
+
             var foundCenters = new List<(float x, float y)>();
 
             int finalConeCount = 0;
@@ -1830,8 +1829,6 @@ namespace ImageApp
             public (int, int) l1_p2;
             public (int, int) l2_p1;
             public (int, int) l2_p2;
-            public float bisectorGradient;
-            public float intsectY;
             public (float x, float y) intersection;
             public (int, int) tip1;
             public (int, int) tip2;
